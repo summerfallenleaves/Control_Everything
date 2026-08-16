@@ -40,10 +40,10 @@ Given a natural-language task, the agent autonomously:
 
 | Platform | Control mechanism | Status |
 |---|---|---|
-| macOS desktop | Accessibility API / AppleScript | Planned |
-| Windows desktop | pywinauto / UIAutomation | Planned |
-| Android | adb + UIAutomator + scrcpy | Planned |
-| iOS | XCUITest / Appium | Planned |
+| macOS desktop | Accessibility API (pyobjc) + CGEvent | Implemented (skeleton) |
+| Android | adb + UIAutomator + scrcpy | Skeleton (mapping designed) |
+| iOS | Appium / WebDriverAgent | Skeleton (mapping designed) |
+| Windows desktop | pywinauto / UIAutomation | Not started |
 
 ## Brain Options
 
@@ -52,20 +52,33 @@ Given a natural-language task, the agent autonomously:
 
 ## Roadmap
 
-- [ ] Core agent loop (observe -> plan -> act -> verify)
-- [ ] macOS desktop controller (first runnable target)
-- [ ] Android controller (adb / scrcpy)
-- [ ] Task planning & self-verification
-- [ ] Multi-platform abstraction layer
+- [x] Core agent loop (observe -> plan -> act -> verify) - `core/orchestrator.py`
+- [x] Unified data model & action space - `core/types.py` (Element tree, normalized coords, unified Action)
+- [x] macOS desktop controller - `backends/macos.py` (AX + CGEvent, verified on macOS 26.5.2)
+- [ ] Android controller (adb / scrcpy) - `backends/android.py` skeleton
+- [ ] iOS controller (Appium / WDA) - `backends/ios.py` skeleton
+- [ ] LLM-backed task planning - `core/planner.py` stub
+- [ ] MCP server wrapper - `server.py` (planned)
 
 ## Getting Started
 
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.14.5 (pinned in `.python-version`).
+macOS backends additionally need **Accessibility** and **Screen Recording** permissions
+(System Settings > Privacy & Security).
 
 ```bash
-uv sync        # create venv & install deps
-uv run python main.py
+uv sync                                            # create venv & install deps
+uv run python main.py --platform macos --inspect   # dump the current UI tree
+uv run python main.py --goal "open Safari" --platform macos   # run the agent (needs ANTHROPIC_API_KEY)
+uv run python main.py --goal "..." --llm dummy --platform macos # offline smoke test
 ```
+
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the full design - especially
+how the unified `Element` tree + `Action` space keeps the agent loop
+platform-agnostic, and how Android / iOS slot in as new `DeviceBackend`s.
+Research notes: [docs/macos-accessibility-research.md](docs/macos-accessibility-research.md).
 
 ## License
 
