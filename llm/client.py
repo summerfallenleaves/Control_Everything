@@ -79,13 +79,15 @@ def _effort_for_openai(effort: str, vendor: str) -> str:
     (medium maps to high server-side), so low tiers collapse to low.
     """
     if vendor == 'deepseek':
-        return {'minimal': 'low', 'low': 'low', 'medium': 'high', 'high': 'high'}.get(effort, 'high')
-    return effort
+        return {'minimal': 'low', 'low': 'low', 'medium': 'high', 'high': 'high',
+                'max': 'max'}.get(effort, 'high')
+    return 'high' if effort == 'max' else effort  # OpenAI has no 'max'
 
 
 def _budget_for_effort(effort: str) -> int:
     """Anthropic budget_tokens for an effort level (>=1024 required)."""
-    return {'minimal': 1024, 'low': 2048, 'medium': 4096, 'high': 8192}.get(effort or 'medium', 4096)
+    return {'minimal': 1024, 'low': 2048, 'medium': 4096, 'high': 8192,
+            'max': 16384}.get(effort or 'medium', 4096)
 
 
 def _action_from_json(data: dict) -> Action:

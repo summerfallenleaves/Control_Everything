@@ -390,6 +390,31 @@ class MacOSBackend(DeviceBackend):
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
         return ActionResult(True, action, detail=f"cg-click at {pos}", method="cg-click")
 
+    def _focus_for_input(self, el) -> bool:
+        """Mouse-click an element to give it focus before typing.
+
+        Measured on Safari: a real mouse click makes setValue + Enter
+        navigation reliable, while synthetic Cmd+L focus does not always.
+        """
+        center = self._element_center(el)
+        if center:
+            self._cg_click(center, Action(kind="tap", note="focus"))
+            return True
+        # Safari's address bar exposes no frame: click the address-bar area
+        # of the main window (upper-center) as a fallback.
+        app = self._frontmost_app()
+        app_ax = ax.AXUIElementCreateApplication(app.processIdentifier())
+        _, wins = ax.AXUIElementCopyAttributeValue(app_ax, "AXWindows", None)
+        for w in (wins or []):
+            _, is_main = ax.AXUIElementCopyAttributeValue(w, "AXMain", None)
+            if is_main:
+                rect = self._ax_rect(self._get(w, "AXFrame"))
+                if rect:
+                    self._cg_click((rect.x + rect.w * 0.45, rect.y + 40),
+                                   Action(kind="tap", note="focus-address-bar"))
+                    return True
+        return False
+
     def _type(self, action: Action) -> ActionResult:
         text = action.text or ""
         el = None
@@ -403,6 +428,7 @@ class MacOSBackend(DeviceBackend):
             # reliable than synthesized keyboard events into the focused app.
             el = self._find_text_field()
         if el is not None:
+            self._focus_for_input(el)
             err = ax.AXUIElementSetAttributeValue(el, "AXValue", text)
             if err == 0:
                 return ActionResult(True, action,

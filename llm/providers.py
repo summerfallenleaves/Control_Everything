@@ -130,9 +130,9 @@ def load_provider_config(
         raise ValueError(f'{P}_THINKING must be enabled/disabled/auto, got {thinking_value!r}')
 
     effort_value = thinking_effort or os.getenv(f'{P}_THINKING_EFFORT') or None
-    if effort_value not in (None, 'minimal', 'low', 'medium', 'high'):
+    if effort_value not in (None, 'minimal', 'low', 'medium', 'high', 'max'):
         raise ValueError(
-            f'{P}_THINKING_EFFORT must be minimal/low/medium/high, got {effort_value!r}'
+            f'{P}_THINKING_EFFORT must be minimal/low/medium/high/max, got {effort_value!r}'
         )
 
     return ProviderConfig(
