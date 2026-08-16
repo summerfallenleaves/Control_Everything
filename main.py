@@ -89,10 +89,15 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:
             print(f'vision disabled: {e}')
 
+    try:
+        vision_interval = max(1, int(os.getenv('VISION_INTERVAL', '3')))
+    except ValueError:
+        vision_interval = 3
+
     from core.orchestrator import AgentOrchestrator
     orch = AgentOrchestrator(
         backend, llm, max_steps=args.max_steps, verify=not args.no_verify,
-        vision=vision,
+        vision=vision, vision_interval=vision_interval,
     )
     result = orch.run(args.goal)
 

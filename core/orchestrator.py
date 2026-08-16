@@ -14,6 +14,13 @@ from core.types import Action, ActionResult, Decision, ScreenState
 from core.verify import VerificationResult, verify_step
 from llm.client import LLMClient
 
+# Actions likely to change the screen; the step AFTER one of these always
+# gets a fresh vision analysis (the moment where seeing matters most).
+VISION_TRIGGER_ACTIONS = frozenset({
+    'tap', 'type', 'key', 'open_app', 'scroll', 'swipe', 'paste',
+    'back', 'home', 'app_switch', 'long_press',
+})
+
 
 @dataclass
 class RunResult:
@@ -36,6 +43,7 @@ class AgentOrchestrator:
         verify: bool = True,
         max_text_rounds: int = 3,
         vision=None,
+        vision_interval: int = 3,
     ):
         self.backend = backend
         self.llm = llm
@@ -43,12 +51,16 @@ class AgentOrchestrator:
         self.verify_enabled = verify
         self.max_text_rounds = max_text_rounds
         self.vision = vision
+        self.vision_interval = max(1, vision_interval)
+        # Initialized high so the FIRST step always runs vision (fresh start).
+        self._steps_since_vision = self.vision_interval
         self.history: list[str] = []
 
     def run(self, goal: str) -> RunResult:
         started = time.monotonic()
         result = RunResult(goal=goal)
         prev_state: Optional[ScreenState] = None
+        last_action_kind: Optional[str] = None
 
         for step in range(1, self.max_steps + 1):
             try:
@@ -57,7 +69,14 @@ class AgentOrchestrator:
                 result.last_error = f'perceive failed: {e}'
                 return result
 
+            do_vision = False
             if self.vision is not None and state.screenshot is not None:
+                self._steps_since_vision += 1
+                if last_action_kind in VISION_TRIGGER_ACTIONS:
+                    do_vision = True
+                elif self._steps_since_vision >= self.vision_interval:
+                    do_vision = True
+            if do_vision:
                 try:
                     note = self.vision.describe(
                         state.screenshot, goal=goal,
@@ -66,6 +85,7 @@ class AgentOrchestrator:
                     if note:
                         state.meta['vision_note'] = note
                         self.history.append(f'  vision: {note[:150]}')
+                    self._steps_since_vision = 0
                 except Exception as e:
                     self.history.append(f'  vision skipped: {e}')
 
@@ -103,8 +123,11 @@ class AgentOrchestrator:
 
             if not act_result.ok:
                 result.last_error = f'action {action.kind} failed: {act_result.error}'
+                last_action_kind = None  # a failed action changed nothing
                 # keep going: LLM may recover (e.g. re-locate element)
                 continue
+
+            last_action_kind = action.kind
 
             if self.verify_enabled:
                 try:
