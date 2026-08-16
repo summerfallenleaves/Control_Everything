@@ -3,15 +3,26 @@
 Unlike a bare model name, a provider config covers WHERE the model runs
 and HOW it is authenticated:
 
-    {PURPOSE}_PROVIDER   anthropic | openai (openai also covers OpenAI-
-                         compatible endpoints: DeepSeek, Moonshot, Qwen,
-                         Ollama, vLLM, LM Studio, ...)
+    {PURPOSE}_PROVIDER   anthropic | openai (openai covers every OpenAI-
+                         compatible endpoint below)
     {PURPOSE}_BASE_URL   API endpoint (None = provider default)
     {PURPOSE}_API_KEY    authentication
     {PURPOSE}_MODEL      model identifier
 
 PURPOSE is one of DECISION / PLANNING / VISION, so each role can point at
 a completely different vendor without touching code.
+
+Supported vendors (all aliases normalize to provider=openai):
+
+    alias           vendor          base_url (example)
+    --------------  --------------  -----------------------------------------
+    openrouter      OpenRouter      https://openrouter.ai/api/v1
+    deepseek        DeepSeek        https://api.deepseek.com
+    qwen/dashscope  Alibaba Qwen    https://dashscope.aliyuncs.com/compatible-mode/v1
+    glm/zhipu       Zhipu GLM       https://open.bigmodel.cn/api/paas/v4
+    kimi/moonshot   Moonshot Kimi   https://api.moonshot.cn/v1
+    ollama          Ollama (local)  http://localhost:11434/v1
+    vllm / lm_studio / groq / mistral / together / perplexity
 """
 
 from __future__ import annotations
@@ -26,6 +37,21 @@ PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_OPENAI = "openai"
 
 SUPPORTED_PROVIDERS = (PROVIDER_ANTHROPIC, PROVIDER_OPENAI)
+
+# Aliases that resolve to the OpenAI-compatible protocol.
+OPENAI_COMPATIBLE_ALIASES = frozenset({
+    "openai_compatible",
+    # routers / aggregators
+    "openrouter",
+    # vendors with OpenAI-compatible endpoints
+    "deepseek",
+    "qwen", "dashscope",
+    "glm", "zhipu",
+    "kimi", "moonshot",
+    "groq", "mistral", "together", "perplexity",
+    # local / self-hosted
+    "ollama", "vllm", "lm_studio",
+})
 
 DEFAULT_DECISION_MODEL = "claude-sonnet-4-5"
 
@@ -67,7 +93,7 @@ def load_provider_config(
         # legacy fallback: no provider configured -> anthropic
         provider_name = PROVIDER_ANTHROPIC
     provider_name = provider_name.lower().replace('-', '_')
-    if provider_name in ('openai_compatible', 'ollama', 'vllm', 'lm_studio', 'deepseek', 'moonshot', 'qwen', 'zhipu', 'dashscope'):
+    if provider_name in OPENAI_COMPATIBLE_ALIASES:
         provider_name = PROVIDER_OPENAI
     if provider_name not in SUPPORTED_PROVIDERS:
         raise ValueError(f"unsupported provider {provider_name!r}; use {SUPPORTED_PROVIDERS}")
