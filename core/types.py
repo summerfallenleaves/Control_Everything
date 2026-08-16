@@ -1,12 +1,11 @@
-"""Platform-agnostic data model for Control_Everything.
+"""Control_Everything 的平台无关数据模型。
 
-All backends (macOS / Android / iOS) translate their native UI representation
-into these types. The orchestrator and LLM only ever see this model, never
-platform-specific concepts like AXFrame or resource-id.
+所有后端（macOS / Android / iOS）都把各自原生的 UI 表示翻译成这些类型。
+orchestrator 与 LLM 只见到本模型，永远接触不到平台专属概念
+（如 AXFrame、resource-id）。
 
-Coordinates are normalized to a 0-1000 space so screenshots and element bounds
-are comparable across wildly different resolutions (macOS 2560x1440 vs a phone
-1080x2400).
+坐标统一归一化到 0-1000 空间，使截图与元素边界在差异巨大的分辨率之间
+（macOS 2560x1440 vs 手机 1080x2400）可以互相比较。
 """
 
 from __future__ import annotations
@@ -15,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, Optional
 
 # ---------------------------------------------------------------------------
-# Geometry (normalized 0-1000 space)
+# 几何（归一化 0-1000 空间）
 # ---------------------------------------------------------------------------
 
 
@@ -27,8 +26,8 @@ class Point:
 
 @dataclass(frozen=True)
 class Rect:
-    x: float  # left
-    y: float  # top
+    x: float  # 左边距
+    y: float  # 上边距
     w: float
     h: float
 
@@ -41,10 +40,10 @@ class Rect:
 
 
 # ---------------------------------------------------------------------------
-# Element tree (the single intermediate representation)
+# 元素树（唯一的中间表示）
 # ---------------------------------------------------------------------------
 
-# Normalized element roles across platforms.
+# 跨平台归一化的元素角色。
 ElementRole = Literal[
     "window", "button", "text_field", "text", "image", "tab", "checkbox",
     "radio", "menu", "menu_item", "list", "link", "dialog", "scroll_area",
@@ -54,12 +53,11 @@ ElementRole = Literal[
 
 @dataclass
 class Element:
-    """One UI node in the accessibility tree.
+    """可访问性树中的一个 UI 节点。
 
-    ref is the stable platform anchor used to re-locate the element across
-    snapshots (AXIdentifier on macOS, resource-id on Android, identifier on
-    iOS). Falls back to (role, text, nth) paths inside each backend when the
-    platform exposes no identifier.
+    ref 是跨快照重定位元素的稳定平台锚点
+    （macOS 的 AXIdentifier、Android 的 resource-id、iOS 的 identifier）。
+    当平台不暴露标识符时，各后端回退到 (role, text, nth) 路径。
     """
 
     ref: str
@@ -69,10 +67,10 @@ class Element:
     children: list["Element"] = field(default_factory=list)
     enabled: bool = True
     focused: bool = False
-    meta: dict[str, Any] = field(default_factory=dict)  # platform raw info
+    meta: dict[str, Any] = field(default_factory=dict)  # 平台原始信息
 
     def flatten(self) -> list["Element"]:
-        """Pre-order walk of the subtree."""
+        """前序遍历子树。"""
         out: list[Element] = [self]
         for c in self.children:
             out.extend(c.flatten())
@@ -88,51 +86,51 @@ class Element:
 
 @dataclass
 class ScreenState:
-    """Full observable state of the device at one moment."""
+    """设备某一时刻的完整可观察状态。"""
 
     tree: Element
-    screenshot: Optional[Any] = None  # PIL Image when available
+    screenshot: Optional[Any] = None  # PIL Image（可用时）
     screenshot_path: Optional[str] = None
-    app: str = ""            # bundle id / package name / app name
+    app: str = ""            # bundle id / 包名 / 应用名
     platform: str = ""       # "macos" | "android" | "ios"
     meta: dict[str, Any] = field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------
-# Action space (what the LLM may emit; every backend implements these)
+# 动作空间（LLM 可以输出的动作；每个后端都要实现它们）
 # ---------------------------------------------------------------------------
 
 ActionKind = Literal[
-    "tap",            # semantic click on an element (or pos)
-    "type",           # enter text into the focused/text-field element
-    "swipe",          # gesture drag from a to b
-    "scroll",         # scroll a scroll area (dir: up/down/left/right)
-    "key",            # press a key / shortcut (name, modifiers)
-    "open_app",       # launch an application (id)
-    "back",           # platform back navigation (no-op on macOS)
-    "home",           # go to platform home (no-op on macOS)
-    "app_switch",     # switch between recent apps (no-op on macOS)
-    "wait",           # wait N seconds (e.g. for async content)
-    "copy",           # copy selected/clipboard content
-    "paste",          # paste clipboard content
-    "long_press",     # gesture reserved for mobile (unsupported on macOS)
-    "pinch",          # gesture reserved for mobile
-    "done",           # agent declares the task finished
+    "tap",            # 语义点击元素（或按坐标）
+    "type",           # 向聚焦的文本输入框输入文字
+    "swipe",          # 从 a 拖到 b 的手势
+    "scroll",         # 滚动滚动区域（dir: up/down/left/right）
+    "key",            # 按键/快捷键（名称、修饰键）
+    "open_app",       # 启动应用（标识）
+    "back",           # 平台返回导航（macOS 上为空操作）
+    "home",           # 回到平台主页（macOS 上为空操作）
+    "app_switch",     # 切换最近应用（macOS 上为空操作）
+    "wait",           # 等待 N 秒（如等待异步内容）
+    "copy",           # 复制选中内容/剪贴板
+    "paste",          # 粘贴剪贴板内容
+    "long_press",     # 移动端手势（macOS 不支持）
+    "pinch",          # 移动端手势
+    "done",           # Agent 宣告任务完成
 ]
 
 
 @dataclass
 class Action:
     kind: ActionKind
-    target: str | None = None   # element ref; resolved by the backend
-    pos: Point | None = None    # normalized coordinate fallback
-    text: str | None = None     # for type
-    dir: str | None = None      # for scroll: up/down/left/right
-    key: str | None = None      # for key: e.g. "return", "v"
+    target: str | None = None   # 元素 ref；由后端解析
+    pos: Point | None = None    # 归一化坐标兜底
+    text: str | None = None     # type 用
+    dir: str | None = None      # scroll 用：up/down/left/right
+    key: str | None = None      # key 用：如 "return"、"v"
     modifiers: list[str] = field(default_factory=list)  # command/option/...
-    duration_s: float = 0.5     # for wait
-    to: Point | None = None     # for swipe
-    note: str = ""              # human/LLM reasoning, ignored by backends
+    duration_s: float = 0.5     # wait 用
+    to: Point | None = None     # swipe 用
+    note: str = ""              # 人/LLM 的推理说明，后端忽略
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {"kind": self.kind}
@@ -154,17 +152,17 @@ class ActionResult:
     ok: bool
     action: Action
     detail: str = ""
-    method: str = ""        # which underlying mechanism ran (ax-press, cg-click...)
+    method: str = ""        # 实际执行的底层机制（ax-press、cg-click……）
     error: str | None = None
 
 
 @dataclass
 class Decision:
-    """What the LLM decided on one step.
+    """LLM 在某一步的决定。
 
-    Relaxed (auto) tool_choice means the model may respond with plain text
-    (an observation, a wait request, a plan) instead of an action. The
-    orchestrator logs text and loops; it acts only on `action`.
+    宽松（auto）tool_choice 意味着模型可能以纯文本回应
+    （一个观察、一个等待请求、一个计划）而不是动作。
+    orchestrator 记录文本并继续循环；只对 action 执行。
     """
 
     action: Action | None = None

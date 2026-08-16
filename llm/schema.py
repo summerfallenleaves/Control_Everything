@@ -1,8 +1,7 @@
-"""Unified action JSON schema for LLM structured output.
+"""LLM 结构化输出的统一动作 JSON Schema。
 
-The LLM only ever emits one of these actions. Every backend implements
-exactly this action space, so the schema is platform-agnostic and never
-changes when a new device type is added.
+LLM 只会输出这些动作之一。每个后端恰好实现这套动作空间，
+因此 Schema 与平台无关，新增设备类型时永不改变。
 """
 
 from core.types import ActionKind
@@ -13,13 +12,13 @@ ACTION_SCHEMA = {
     "type": "object",
     "properties": {
         "kind": {"type": "string", "enum": ACTION_KINDS_LIST},
-        "reasoning": {"type": "string", "description": "short rationale for the action"},
-        "target": {"type": ["string", "null"], "description": "element ref: use ONLY the ref field value from the UI tree (e.g. \"axid:ShareButton\" or \"button#3\"), not the whole tree line"},
+        "reasoning": {"type": "string", "description": "动作的简短理由"},
+        "target": {"type": ["string", "null"], "description": "元素 ref：只使用 UI 树中的 ref 字段值（如 \"axid:ShareButton\" 或 \"button#3\"），不要粘贴整行 UI 树"},
         "pos": {"type": ["object", "null"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
-                "description": "normalized 0-1000 coordinate fallback"},
-        "text": {"type": ["string", "null"], "description": "text to type / app id to open"},
+                "description": "归一化 0-1000 坐标兜底"},
+        "text": {"type": ["string", "null"], "description": "要输入的文本 / 要打开的应用 id"},
         "dir": {"type": ["string", "null"], "enum": ["up", "down", "left", "right", None]},
-        "key": {"type": ["string", "null"], "description": "key name, e.g. return / escape / v"},
+        "key": {"type": ["string", "null"], "description": "按键名称，如 return / escape / v"},
         "modifiers": {"type": "array", "items": {"type": "string"}},
         "duration_s": {"type": "number"},
         "to": {"type": ["object", "null"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}}},
@@ -28,20 +27,18 @@ ACTION_SCHEMA = {
 }
 
 OBSERVATION_PROMPT = """
-You are an autonomous GUI agent. You operate a real device by emitting one
-JSON action at a time. The UI tree below lists clickable/visible elements
-with stable refs and normalized coordinates (0-1000). Use element refs
-whenever possible; coordinates only as a fallback.
+你是一个自主 GUI Agent。你通过每次输出一个 JSON 动作来操作真实设备。
+下面的 UI 树列出了可点击/可见的元素，带稳定的 ref 和归一化坐标（0-1000）。
+尽可能使用元素 ref；坐标仅作兜底。
 
-Available actions: tap, type, swipe, scroll, key, open_app, back, home,
-app_switch, wait, copy, paste, long_press, pinch, done.
+可用动作：tap、type、swipe、scroll、key、open_app、back、home、
+app_switch、wait、copy、paste、long_press、pinch、done。
 
-You may reply with SHORT text ONLY when you genuinely cannot pick an
-action yet (e.g. waiting for the page to load). Otherwise you MUST call
-the gui_action tool - do not narrate, do not restate the plan.
+只有当确实无法选定动作时（例如等待页面加载），才允许输出简短文本。
+否则必须调用 gui_action 工具——不要叙述，不要复述计划。
 
-For element targeting, copy ONLY the ref value (e.g. 'axid:ShareButton'),
-never the whole UI-tree line.
+定位元素时只复制 ref 值（例如 'axid:ShareButton'），
+绝不要粘贴整行 UI 树。
 
-Return exactly one JSON object matching the action schema.
+只返回一个符合动作 Schema 的 JSON 对象。
 """

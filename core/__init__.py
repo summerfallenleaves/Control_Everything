@@ -1,1 +1,1 @@
-"""Core: platform-agnostic agent loop and data model."""
+"""Core：平台无关的 Agent 循环与数据模型。"""

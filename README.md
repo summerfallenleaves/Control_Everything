@@ -1,125 +1,104 @@
 # Control_Everything
 
-> Use AI to control everything - an autonomous agent that sees and operates any GUI.
+> 用 AI 控制一切 —— 一个能「看」界面、「操作」界面的自主 GUI Agent。
 
-**Control_Everything** is an autonomous **GUI Agent** that perceives and operates any device with an
-interactive interface - phones, desktops, tablets - to complete user-assigned tasks end to end:
-order a takeaway, buy a dehumidifier, book a flight, and so on. The user states the goal;
-the agent figures out the rest.
+**Control_Everything** 是一个自主 **GUI Agent**：它能感知并操作任何带交互界面的设备
+（手机、电脑、平板），端到端完成用户指派的任务——点外卖、买除湿机、订机票等等。
+用户只需说出目标，剩下的交给 Agent。
 
 ---
 
-## What It Does
+## 它能做什么
 
-Given a natural-language task, the agent autonomously:
+给定一个自然语言任务，Agent 自主完成：
 
-1. **Observes** the current screen (screenshot + UI accessibility tree / OCR)
-2. **Plans** the next action with an LLM (tap, type, swipe, scroll, wait...)
-3. **Executes** the action on the real device
-4. **Verifies** the result and iterates until the task is done
+1. **观察**当前屏幕（截图 + UI 可访问性树 / OCR）
+2. **规划**下一步动作（点击、输入、滑动、滚动、等待……）
+3. **执行**动作到真实设备
+4. **验证**结果并迭代，直到任务完成
 
 ```
 +--------------------------------------------------------------------------+
-|                Task Orchestrator (LLM Agent)                             |
-|  "buy a dehumidifier" -> open app -> search -> filter                    |
-|  -> add to cart -> checkout -> confirm -> verify order                    |
+|                    任务编排器（LLM Agent）                                |
+|  "买除湿机" -> 打开应用 -> 搜索 -> 筛选 -> 加购 -> 下单 -> 确认 -> 验证订单   |
 +-----------------------------+---------------------------+----------------+
 |                             |                           |                |
-|          observe            |           act             |                |
+|          观察               |           执行            |                |
 |                             |                           |                |
 +-----------------------------v----------------------------+---------------+
-|  Perception Layer            |  Control Layer                            |
-|  . screen capture            |  . Desktop: a11y API                      |
-|  . UI hierarchy dump         |    (macOS / Windows)                      |
-|  . OCR / vision              |  . Android: adb + UIAutomator / scrcpy    |
-|                              |  . iOS: XCUITest / Appium                 |
+|  感知层                     |  控制层                                    |
+|  . 屏幕截图                 |  . 桌面端: 可访问性 API (macOS / Windows)   |
+|  . UI 层级树                |  . Android: adb + UIAutomator / scrcpy     |
+|  . OCR / 视觉理解           |  . iOS: XCUITest / Appium                  |
 +-----------------------------+-------------------------------------------+
 ```
 
-## Target Platforms
+## 目标平台
 
-| Platform | Control mechanism | Status |
+| 平台 | 控制机制 | 状态 |
 |---|---|---|
-| macOS desktop | Accessibility API (pyobjc) + CGEvent | Implemented (skeleton) |
-| Android | adb + UIAutomator + scrcpy | Skeleton (mapping designed) |
-| iOS | Appium / WebDriverAgent | Skeleton (mapping designed) |
-| Windows desktop | pywinauto / UIAutomation | Not started |
+| macOS 桌面 | 可访问性 API（pyobjc）+ CGEvent | 已实现（可用） |
+| Android | adb + UIAutomator + scrcpy | 骨架（映射已设计） |
+| iOS | Appium / WebDriverAgent | 骨架（映射已设计） |
+| Windows 桌面 | pywinauto / UIAutomation | 未开始 |
 
-## Brain Options
+## 大脑选型
 
-- Cloud APIs: Anthropic *Computer Use*, OpenAI *Operator*
-- Open / on-prem vision models: UI-TARS, Qwen2.5-VL
+- 云 API：Anthropic Computer Use、OpenAI Operator
+- 开源 / 本地视觉模型：UI-TARS、Qwen2.5-VL / Qwen3 系列
+- 当前支持（OpenAI 兼容协议）：DeepSeek、Qwen、GLM、Kimi、OpenRouter、Ollama 等
 
 ## Roadmap
 
-- [x] Core agent loop (observe -> plan -> act -> verify) - `core/orchestrator.py`
-- [x] Unified data model & action space - `core/types.py` (Element tree, normalized coords, unified Action)
-- [x] macOS desktop controller - `backends/macos.py` (AX + CGEvent, verified on macOS 26.5.2)
-- [ ] Android controller (adb / scrcpy) - `backends/android.py` skeleton
-- [ ] iOS controller (Appium / WDA) - `backends/ios.py` skeleton
-- [ ] LLM-backed task planning - `core/planner.py` stub
-- [ ] MCP server wrapper - `server.py` (planned)
+- [x] 核心 Agent 循环（观察 -> 规划 -> 执行 -> 验证）- `core/orchestrator.py`
+- [x] 统一数据模型与动作空间 - `core/types.py`（Element 树、归一化坐标、统一 Action）
+- [x] macOS 桌面控制器 - `backends/macos.py`（AX + CGEvent，macOS 26.5.2 实测）
+- [x] 视觉接入 - `llm/vision.py`（qwen3.7-plus 看截图，给纯文本大脑装上眼睛）
+- [ ] Android 控制器（adb / scrcpy）- `backends/android.py` 骨架
+- [ ] iOS 控制器（Appium / WDA）- `backends/ios.py` 骨架
+- [ ] LLM 任务规划 - `core/planner.py` 桩
+- [ ] MCP server 封装 - `server.py`（规划中）
 
-## Getting Started
+## 快速开始
 
-Requires [uv](https://docs.astral.sh/uv/) and Python 3.14.5 (pinned in `.python-version`).
-macOS backends additionally need **Accessibility** and **Screen Recording** permissions
-(System Settings > Privacy & Security).
+需要 [uv](https://docs.astral.sh/uv/) 和 Python 3.14.5（已固化在 `.python-version`）。
+macOS 后端还需要在「系统设置 > 隐私与安全性」中授予**辅助功能**与**屏幕录制**权限。
 
 ```bash
-uv sync                                            # create venv & install deps
-uv run python main.py --platform macos --inspect   # dump the current UI tree
-uv run python main.py --goal "open Safari" --platform macos   # run the agent
-uv run python main.py --goal "..." --llm dummy --platform macos # offline smoke test
+uv sync                                            # 创建虚拟环境并安装依赖
+uv run python main.py --platform macos --inspect   # 导出当前 UI 树
+uv run python main.py --goal "打开 Safari" --platform macos   # 运行 Agent（需在 .env 配置模型）
+uv run python main.py --goal "..." --llm dummy --platform macos # 离线冒烟测试
 ```
 
-### Configuration (`.env`, full provider per purpose)
+### 配置（`.env`，按用途配置完整供应商信息）
 
-Copy [`.env.example`](.env.example) to `.env`. Each purpose is a **complete
-provider block**, so any vendor can back any role without code changes:
-
-```
-# {PURPOSE}_PROVIDER  anthropic | openai (openai covers OpenAI-compatible endpoints)
-# {PURPOSE}_BASE_URL  endpoint (empty = provider default)
-# {PURPOSE}_API_KEY   authentication
-# {PURPOSE}_MODEL     model id
-DECISION_PROVIDER=anthropic
-DECISION_BASE_URL=
-DECISION_API_KEY=sk-ant-...
-DECISION_MODEL=claude-sonnet-4-5
-```
-
-Supported providers: **anthropic** (official or compatible) and **openai**
-(any OpenAI-compatible endpoint - DeepSeek, Moonshot, Qwen, Ollama, vLLM,
-LM Studio...).
-
-Examples:
+复制 [`.env.example`](.env.example) 为 `.env` 并填入 API key。每个用途是一个**完整的
+供应商配置块**，换供应商无需改代码：
 
 ```
-# DeepSeek as the decision brain
-DECISION_PROVIDER=openai
+# {PURPOSE}_PROVIDER   anthropic | openai（openai 覆盖所有 OpenAI 兼容端点）
+# {PURPOSE}_BASE_URL   端点地址（留空 = 供应商默认）
+# {PURPOSE}_API_KEY    认证密钥
+# {PURPOSE}_MODEL      模型标识
+DECISION_PROVIDER=deepseek
 DECISION_BASE_URL=https://api.deepseek.com
 DECISION_API_KEY=sk-...
-DECISION_MODEL=deepseek-chat
-
-# Local Qwen via Ollama as vision fallback
-VISION_PROVIDER=openai
-VISION_BASE_URL=http://localhost:11434/v1
-VISION_MODEL=qwen2.5-vl
+DECISION_MODEL=deepseek-v4-flash
 ```
 
-`.env` is git-ignored; commit only `.env.example`. CLI overrides: `--provider`,
-`--model`, `--llm dummy` (offline smoke test).
+支持的供应商：**anthropic**（官方或兼容端点）与 **openai**（任意 OpenAI 兼容端点——
+DeepSeek、Qwen、GLM、Kimi、OpenRouter、Ollama、vLLM、LM Studio……）。
 
-## Architecture
+模型推荐配置（DeepSeek / Qwen / OpenRouter）：见
+[docs/model-recommendations.md](docs/model-recommendations.md)。
 
-Recommended model setups (DeepSeek / Qwen / OpenRouter):
-[docs/model-recommendations.md](docs/model-recommendations.md).
-See [docs/architecture.md](docs/architecture.md) for the full design - especially
-how the unified `Element` tree + `Action` space keeps the agent loop
-platform-agnostic, and how Android / iOS slot in as new `DeviceBackend`s.
-Research notes: [docs/macos-accessibility-research.md](docs/macos-accessibility-research.md).
+## 架构
 
-## License
+完整设计见 [docs/architecture.md](docs/architecture.md)——重点：统一的 `Element` 树 +
+`Action` 空间让 Agent 循环与平台无关，Android / iOS 只需新增 `DeviceBackend` 实现即可接入。
+调研笔记：[docs/macos-accessibility-research.md](docs/macos-accessibility-research.md)。
+
+## 许可证
 
 [MIT](LICENSE)

@@ -1,11 +1,10 @@
-"""DeviceBackend abstraction.
+"""DeviceBackend 抽象层。
 
-The single point where platform differences are absorbed. The orchestrator
-only depends on this interface, so adding a new platform (Android, iOS) is
-just implementing another backend.
+平台差异被吸收的唯一分叉点。orchestrator 只依赖这个接口，
+因此新增平台（Android、iOS）只是再实现一个后端。
 
-Implementations translate native UI state into core.types (Element tree +
-screenshot) and execute core.types.Action on the real device.
+实现负责把原生 UI 状态翻译成 core.types（Element 树 + 截图），
+并在真实设备上执行 core.types.Action。
 """
 
 from __future__ import annotations
@@ -17,39 +16,39 @@ from core.types import Action, ActionResult, ScreenState
 
 
 class BackendError(Exception):
-    """Base error for all backend failures."""
+    """所有后端错误的基类。"""
 
 
 class PermissionError_(BackendError):
-    """The process lacks the required OS permission (Accessibility etc.)."""
+    """进程缺少所需的操作系统权限（辅助功能等）。"""
 
 
 class ElementNotFoundError(BackendError):
-    """A target element ref could not be re-located in the current snapshot."""
+    """目标元素 ref 无法在当前快照中重新定位。"""
 
 
 class ActionNotSupportedError(BackendError):
-    """The platform cannot perform this action kind (e.g. pinch on macOS)."""
+    """平台无法执行该动作类型（例如 macOS 上的 pinch）。"""
 
 
 class DeviceBackend(abc.ABC):
-    """Platform-agnostic interface every device controller implements."""
+    """每个设备控制器都要实现的平台无关接口。"""
 
     platform: str = "unknown"
 
-    # -- observation ---------------------------------------------------------
+    # -- 观察 --------------------------------------------------------------
 
     @abc.abstractmethod
     def perceive(self) -> ScreenState:
-        """Capture the current screen: UI tree (+ screenshot when possible)."""
+        """捕获当前屏幕：UI 树（可能时附带截图）。"""
 
-    # -- execution -----------------------------------------------------------
+    # -- 执行 --------------------------------------------------------------
 
     @abc.abstractmethod
     def act(self, action: Action) -> ActionResult:
-        """Perform a unified action on the real device."""
+        """在真实设备上执行一个统一动作。"""
 
-    # -- convenience primitives (built on act) ------------------------------
+    # -- 便捷原语（基于 act 构建） ------------------------------------------
 
     def open_app(self, app_id: str) -> ActionResult:
         return self.act(Action(kind="open_app", text=app_id))
@@ -69,15 +68,15 @@ class DeviceBackend(abc.ABC):
     def tap(self, ref: Optional[str] = None, pos=None) -> ActionResult:
         return self.act(Action(kind="tap", target=ref, pos=pos))
 
-    # -- helpers -------------------------------------------------------------
+    # -- 辅助 --------------------------------------------------------------
 
     def is_app_running(self, app_id: str) -> bool:
-        """Whether an app (bundle id or name) is currently running.
+        """应用（bundle id 或名称）当前是否在运行。
 
-        Base implementation returns False; backends override with a real
-        check (NSWorkspace / adb shell ps / WDA app state).
+        基类实现返回 False；后端用真实检查覆盖
+        （NSWorkspace / adb shell ps / WDA 应用状态）。
         """
         return False
 
     def close(self) -> None:
-        """Release resources; called at the end of a session."""
+        """释放资源；会话结束时调用。"""

@@ -1,7 +1,7 @@
 [project]
 name = "control-everything"
 version = "0.1.0"
-description = "Autonomous GUI agent that operates phones and desktops (macOS/Android/iOS) to complete user tasks"
+description = "自主 GUI Agent：控制手机与电脑（macOS/Android/iOS）完成用户任务"
 readme = "README.md"
 requires-python = ">=3.14.5"
 dependencies = [

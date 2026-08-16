@@ -1,16 +1,16 @@
-"""macOS backend: Accessibility API (pyobjc) + CoreGraphics events.
+"""macOS 后端：可访问性 API（pyobjc）+ CoreGraphics 事件。
 
-Verified on macOS 26.5.2 against Safari / TextEdit (see
-docs/macos-accessibility-research.md):
+已在 macOS 26.5.2 上对 Safari / TextEdit 实测验证
+（见 docs/macos-accessibility-research.md）：
 
-- AX tree traversal and element coordinates: working
-- AXValue text entry (incl. Chinese): working
-- screencapture screenshots: working (Screen Recording permission granted)
+- AX 树遍历与元素坐标：可用
+- AXValue 文本输入（含中文）：可用
+- screencapture 截图：可用（已授予屏幕录制权限）
 
-Strategy (three-layer hybrid):
-  1. AX semantic actions (AXPress / set AXValue) - preferred, stable
-  2. CGEvent coordinate fallback (self-drawn / WebView controls)
-  3. screenshot + vision (not here; exposed via perceive().screenshot)
+策略（三层混合）：
+  1. AX 语义动作（AXPress / set AXValue）—— 首选，稳定
+  2. CGEvent 坐标兜底（自绘 / WebView 控件）
+  3. 截图 + 视觉（不在本模块；经 perceive().screenshot 暴露）
 """
 
 from __future__ import annotations
@@ -28,14 +28,14 @@ from backends.base import (
     PermissionError_,
 )
 
-try:  # macOS only; import errors surface at construction time
+try:  # 仅 macOS；导入错误会在构造时暴露
     import ApplicationServices as ax
     import AppKit
     import Quartz
-except ImportError:  # pragma: no cover - non-macOS
+except ImportError:  # pragma: no cover - 非 macOS
     ax = AppKit = Quartz = None
 
-# AX role -> normalized role
+# AX 角色 -> 归一化角色
 _ROLE_MAP = {
     "AXButton": "button",
     "AXTextField": "text_field",
@@ -70,13 +70,13 @@ _ATTRS = [
 
 
 class MacOSBackend(DeviceBackend):
-    """Controls macOS desktop apps via Accessibility API + CGEvent."""
+    """通过可访问性 API + CGEvent 控制 macOS 桌面应用。"""
 
     platform = "macos"
 
     def __init__(self, screenshot: bool = True, max_depth: int = 8):
         if ax is None:
-            raise BackendError("pyobjc frameworks unavailable (macOS required)")
+            raise BackendError("pyobjc 框架不可用（需要 macOS）")
         self._screenshot_enabled = screenshot
         self._max_depth = max_depth
         self._screen = AppKit.NSScreen.mainScreen().frame()
@@ -84,11 +84,10 @@ class MacOSBackend(DeviceBackend):
         self._sh = float(self._screen.size.height)
         if not self._check_permission():
             raise PermissionError_(
-                "Accessibility permission missing. Grant it in "
-                "System Settings > Privacy & Security > Accessibility."
+                "缺少辅助功能权限。请在「系统设置 > 隐私与安全性 > 辅助功能」中授权。"
             )
 
-    # -- helpers -------------------------------------------------------------
+    # -- 辅助 ---------------------------------------------------------------
 
     def _check_permission(self) -> bool:
         return bool(ax.AXIsProcessTrusted())
@@ -100,7 +99,7 @@ class MacOSBackend(DeviceBackend):
         return (p.x / 1000 * self._sw, p.y / 1000 * self._sh)
 
     def _ax_rect(self, value) -> Optional[Rect]:
-        """Extract a Rect from an AXFrame value (AXValue wrapper or CGRect)."""
+        """从 AXFrame 值提取 Rect（AXValue 包装或 CGRect）。"""
         if value is None:
             return None
         try:
@@ -109,7 +108,7 @@ class MacOSBackend(DeviceBackend):
                             value.size.width, value.size.height)
         except Exception:
             pass
-        try:  # AXValue wrapped
+        try:  # AXValue 包装
             err, r = ax.AXValueGetValue(value, ax.kAXValueCGRectType, None)
             if err == 0 and hasattr(r, "origin"):
                 return Rect(r.origin.x, r.origin.y, r.size.width, r.size.height)
@@ -140,7 +139,7 @@ class MacOSBackend(DeviceBackend):
         return None
 
     def _element_center(self, el):
-        """Best-effort center point of an element (frame -> pos+size -> None)."""
+        """尽力获取元素中心点（frame -> pos+size -> None）。"""
         frame = self._ax_rect(self._get(el, "AXFrame"))
         if frame:
             return (frame.x + frame.w / 2, frame.y + frame.h / 2)
@@ -157,9 +156,9 @@ class MacOSBackend(DeviceBackend):
     def _ref(self, el, role: str, counter: dict) -> str:
         ident = self._get(el, "AXIdentifier")
         if ident:
-            return f"axid:{ident}"
+            return f'axid:{ident}'
         counter[role] = counter.get(role, 0) + 1
-        return f"{role}#{counter[role]}"
+        return f'{role}#{counter[role]}'
 
     def _text(self, el) -> str:
         for attr in ("AXTitle", "AXDescription", "AXValue"):
@@ -171,11 +170,11 @@ class MacOSBackend(DeviceBackend):
     def _frontmost_app(self):
         return AppKit.NSWorkspace.sharedWorkspace().frontmostApplication()
 
-    # -- observation ---------------------------------------------------------
+    # -- 观察 ---------------------------------------------------------------
 
     def perceive(self) -> ScreenState:
         if not self._check_permission():
-            raise PermissionError_("Accessibility permission was revoked.")
+            raise PermissionError_("辅助功能权限被撤销。")
         app = self._frontmost_app()
         pid = app.processIdentifier()
         app_ax = ax.AXUIElementCreateApplication(pid)
@@ -230,7 +229,7 @@ class MacOSBackend(DeviceBackend):
         return node
 
     def is_app_running(self, app_id: str) -> bool:
-        """True if an app with this bundle id / name is in the running list."""
+        """带该 bundle id / 名称的应用是否在运行列表中。"""
         apps = AppKit.NSWorkspace.sharedWorkspace().runningApplications()
         for a in apps:
             bid = a.bundleIdentifier() or ""
@@ -239,13 +238,13 @@ class MacOSBackend(DeviceBackend):
                 return True
         return False
 
-    # -- element resolution --------------------------------------------------
+    # -- 元素定位 ------------------------------------------------------------
 
     def _find_text_field(self):
-        """Locate a text-input element, preferring the MAIN window's subtree.
+        """定位文本输入元素，优先 MAIN（主）窗口的子树。
 
-        Safari can have several windows; typing into a non-main window's
-        address bar does not navigate what the user sees."""
+        Safari 可能有多个窗口；把文字输进非主窗口的地址栏
+        不会导航用户眼前的内容。"""
         app = self._frontmost_app()
         app_ax = ax.AXUIElementCreateApplication(app.processIdentifier())
         _, wins = ax.AXUIElementCopyAttributeValue(app_ax, "AXWindows", None)
@@ -279,11 +278,11 @@ class MacOSBackend(DeviceBackend):
         return None
 
     def _find_ax(self, ref: str):
-        """Locate a live AXUIElement by our ref (re-walk; refs are snapshot-local).
+        """按我们的 ref 定位活的 AXUIElement（重新遍历；ref 只在本轮快照有效）。
 
-        Tolerant matching: LLMs sometimes paste the whole tree line
-        ("axid:X role=text_field text='...'") instead of just the ref. We try
-        the exact ref first, then its first whitespace-separated token.
+        容错匹配：LLM 有时会把整行 UI 树粘贴过来
+        （"axid:X role=text_field text='...'"）而不是只用 ref。
+        我们先精确匹配 ref，失败再试它按空白分割的第一个 token。
         """
         app = self._frontmost_app()
         app_ax = ax.AXUIElementCreateApplication(app.processIdentifier())
@@ -312,22 +311,22 @@ class MacOSBackend(DeviceBackend):
             if first_token != ref:
                 found = walk_for(first_token)
         if found is None:
-            raise ElementNotFoundError(f"element ref not found in current snapshot: {ref}")
+            raise ElementNotFoundError(f'当前快照中找不到元素 ref: {ref}')
         return found
 
     def _resolve_pos(self, action: Action):
-        """Element ref first, then normalized coordinates."""
+        """优先元素 ref，其次归一化坐标。"""
         if action.target:
             el = self._find_ax(action.target)
             bounds = self._ax_rect(self._get(el, "AXFrame"))
             if bounds:
                 return (bounds.x + bounds.w / 2, bounds.y + bounds.h / 2), el
-            raise ElementNotFoundError(f"no frame for element {action.target}")
+            raise ElementNotFoundError(f'元素没有 frame: {action.target}')
         if action.pos:
             return self._native(action.pos), None
-        raise BackendError(f"action {action.kind} needs target or pos")
+        raise BackendError(f'动作 {action.kind} 需要 target 或 pos')
 
-    # -- execution -----------------------------------------------------------
+    # -- 执行 ---------------------------------------------------------------
 
     def act(self, action: Action) -> ActionResult:
         try:
@@ -336,33 +335,33 @@ class MacOSBackend(DeviceBackend):
             return ActionResult(False, action, error=str(e))
         except ElementNotFoundError as e:
             return ActionResult(False, action, error=str(e))
-        except Exception as e:  # pragma: no cover - defensive
-            return ActionResult(False, action, error=f"{type(e).__name__}: {e}")
+        except Exception as e:  # pragma: no cover - 防御
+            return ActionResult(False, action, error=f'{type(e).__name__}: {e}')
 
     def _act(self, action: Action) -> ActionResult:
         kind = action.kind
         if kind == "wait":
             time.sleep(max(0.0, action.duration_s))
-            return ActionResult(True, action, detail=f"waited {action.duration_s}s", method="sleep")
+            return ActionResult(True, action, detail=f"等待了 {action.duration_s}s", method="sleep")
         if kind == "open_app":
             name = action.text or action.target or ""
-            # bundle ids (com.apple.calculator) need `open -b`; app names need `open -a`
+            # bundle id（com.apple.calculator）用 `open -b`；应用名用 `open -a`
             if "." in name and not name.endswith(".app"):
                 subprocess.run(["open", "-b", name], check=False)
-                detail = f"launched bundle {name}"
+                detail = f'启动了 bundle {name}'
             else:
                 subprocess.run(["open", "-a", name], check=False)
-                detail = f"launched {name}"
+                detail = f'启动了 {name}'
             self._activate_app(name)
-            return ActionResult(True, action, detail=detail + " + activated", method="open")
+            return ActionResult(True, action, detail=detail + " + 已激活", method="open")
         if kind in ("back", "home", "app_switch"):
-            return ActionResult(True, action, detail=f"{kind} is a no-op on macOS", method="noop")
+            return ActionResult(True, action, detail=f"{kind} 在 macOS 上是空操作", method="noop")
         if kind == "copy":
             subprocess.run(["pbcopy"], check=False, input=action.text or "", text=True)
-            return ActionResult(True, action, detail="copied to clipboard", method="pbcopy")
+            return ActionResult(True, action, detail="已复制到剪贴板", method="pbcopy")
         if kind == "paste":
             out = subprocess.run(["pbpaste"], check=False, capture_output=True, text=True)
-            return ActionResult(True, action, detail=f"paste ({out.stdout[:40]!r})", method="pbpaste")
+            return ActionResult(True, action, detail=f"粘贴 ({out.stdout[:40]!r})", method="pbpaste")
 
         if kind == "tap":
             return self._tap(action)
@@ -370,52 +369,50 @@ class MacOSBackend(DeviceBackend):
             return self._type(action)
         if kind == "key":
             return self._key(action)
-        if kind == "shortcut":  # tolerate LLM emitting shortcut for key combos
+        if kind == "shortcut":  # 容忍 LLM 用 shortcut 表示组合键
             return self._key(action)
         if kind == "scroll":
             return self._scroll(action)
         if kind == "swipe":
             return self._swipe(action)
         if kind in ("long_press", "pinch"):
-            raise ActionNotSupportedError(f"{kind} is not supported on macOS")
+            raise ActionNotSupportedError(f'{kind} 在 macOS 上不支持')
         if kind == "done":
-            return ActionResult(True, action, detail="done", method="none")
-        raise ActionNotSupportedError(f"unhandled action kind: {kind}")
+            return ActionResult(True, action, detail="完成", method="none")
+        raise ActionNotSupportedError(f'未处理的动作类型: {kind}')
 
     def _tap(self, action: Action) -> ActionResult:
-        """Semantic press first (no coordinates needed), coordinates as fallback."""
+        """语义按压优先（无需坐标），坐标兜底。"""
         if action.target:
             el = self._find_ax(action.target)
             err = ax.AXUIElementPerformAction(el, ax.kAXPressAction)
             if err == 0:
-                return ActionResult(True, action, detail=f"pressed {action.target}", method="ax-press")
+                return ActionResult(True, action, detail=f'按压了 {action.target}', method='ax-press')
             center = self._element_center(el)
             if center:
                 return self._cg_click(center, action)
-            raise ElementNotFoundError(f"no frame/position for element {action.target}")
+            raise ElementNotFoundError(f'元素没有 frame/位置: {action.target}')
         if action.pos:
             return self._cg_click(self._native(action.pos), action)
-        raise BackendError("tap needs target or pos")
+        raise BackendError("tap 需要 target 或 pos")
 
     def _cg_click(self, pos: tuple[float, float], action: Action) -> ActionResult:
         pt = Quartz.CGPointMake(pos[0], pos[1])
         for evt_type in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
             evt = Quartz.CGEventCreateMouseEvent(None, evt_type, pt, Quartz.kCGMouseButtonLeft)
             Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
-        return ActionResult(True, action, detail=f"cg-click at {pos}", method="cg-click")
+        return ActionResult(True, action, detail=f'cg-click 于 {pos}', method='cg-click')
 
     def _focus_for_input(self, el) -> bool:
-        """Mouse-click an element to give it focus before typing.
+        """输入前用鼠标点击元素使其获得焦点。
 
-        Measured on Safari: a real mouse click makes setValue + Enter
-        navigation reliable, while synthetic Cmd+L focus does not always.
-        """
+        Safari 实测：真实鼠标点击能让 setValue + 回车导航可靠生效，
+        而合成 Cmd+L 聚焦并不总是有效。"""
         center = self._element_center(el)
         if center:
             self._cg_click(center, Action(kind="tap", note="focus"))
             return True
-        # Safari's address bar exposes no frame: click the address-bar area
-        # of the main window (upper-center) as a fallback.
+        # Safari 地址栏不暴露 frame：兜底点击主窗口的地址栏区域（上部中央）。
         app = self._frontmost_app()
         app_ax = ax.AXUIElementCreateApplication(app.processIdentifier())
         _, wins = ax.AXUIElementCopyAttributeValue(app_ax, "AXWindows", None)
@@ -438,35 +435,35 @@ class MacOSBackend(DeviceBackend):
             except ElementNotFoundError:
                 el = None
         if el is None:
-            # Auto-locate the address/search field: direct setValue is far more
-            # reliable than synthesized keyboard events into the focused app.
+            # 自动定位地址栏/搜索框：直接 setValue 远比
+            # 向聚焦应用合成键盘事件可靠。
             el = self._find_text_field()
         if el is not None:
             self._focus_for_input(el)
             err = ax.AXUIElementSetAttributeValue(el, "AXValue", text)
             if err == 0:
                 return ActionResult(True, action,
-                                    detail=f"set AXValue on text field ({text[:30]!r})",
+                                    detail=f'已在文本框中设置 AXValue ({text[:30]!r})',
                                     method="ax-value")
-            # fall through to keyboard
-        # CGEvent unicode keyboard entry, delivered to the target app directly
+            # 落到键盘输入
+        # CGEvent unicode 键盘输入，直接送达目标应用
         for ch in text:
             evt_down = Quartz.CGEventCreateKeyboardEvent(None, 0, True)
             Quartz.CGEventKeyboardSetUnicodeString(evt_down, 1, ch)
             self._post_event(evt_down)
             self._post_event(Quartz.CGEventCreateKeyboardEvent(None, 0, False))
-        return ActionResult(True, action, detail=f"typed {len(text)} chars", method="cg-keyboard-unicode")
+        return ActionResult(True, action, detail=f'输入了 {len(text)} 个字符', method='cg-keyboard-unicode')
 
     def _post_event(self, evt) -> None:
-        """Post a CGEvent to the global HID tap.
+        """把 CGEvent 发布到全局 HID tap。
 
-        Measured on Safari: CGEventPostToPid keyboard events are ignored, but
-        HID-tap events work once the target app is OS-frontmost (open_app now
-        activates the app via NSWorkspace)."""
+        Safari 实测：CGEventPostToPid 的键盘事件会被忽略，
+        但只要目标应用是 OS 前台（open_app 现在会经 NSWorkspace 激活应用），
+        HID-tap 事件就有效。"""
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
 
     def _activate_app(self, app_id: str) -> bool:
-        """Bring an app to the OS front (makes keyboard events land)."""
+        """把应用带到 OS 前台（让键盘事件落地）。"""
         ws = AppKit.NSWorkspace.sharedWorkspace()
         for a in ws.runningApplications():
             bid = a.bundleIdentifier() or ""
@@ -480,7 +477,7 @@ class MacOSBackend(DeviceBackend):
         from backends._mac_keys import KEYCODES, MODIFIER_FLAGS
         key = (action.key or "").lower()
         if key not in KEYCODES:
-            raise BackendError(f"unknown key: {key}")
+            raise BackendError(f'未知按键: {key}')
         flags = 0
         for m in action.modifiers:
             flags |= MODIFIER_FLAGS.get(m.lower(), 0)
@@ -491,7 +488,7 @@ class MacOSBackend(DeviceBackend):
         evt_up = Quartz.CGEventCreateKeyboardEvent(None, kc, False)
         Quartz.CGEventSetFlags(evt_up, flags)
         self._post_event(evt_up)
-        return ActionResult(True, action, detail=f"key {key} -> pid", method="cg-keyboard-virtual-key")
+        return ActionResult(True, action, detail=f'按键 {key} -> pid', method='cg-keyboard-virtual-key')
 
     def _scroll(self, action: Action) -> ActionResult:
         dir_map = {"down": -1.0, "up": 1.0, "left": 1.0, "right": -1.0}
@@ -501,11 +498,11 @@ class MacOSBackend(DeviceBackend):
             None, Quartz.kCGScrollEventUnitLine, 1, int(val * 3))
         Quartz.CGEventSetLocation(evt, Quartz.CGPointMake(pos[0], pos[1]))
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
-        return ActionResult(True, action, detail=f"scroll {action.dir}", method="cg-scroll-wheel")
+        return ActionResult(True, action, detail=f'滚动 {action.dir}', method='cg-scroll-wheel')
 
     def _swipe(self, action: Action) -> ActionResult:
         if not action.pos or not action.to:
-            raise BackendError("swipe needs pos and to")
+            raise BackendError("swipe 需要 pos 和 to")
         src = self._native(action.pos)
         dst = self._native(action.to)
         evt = Quartz.CGEventCreateMouseEvent(
@@ -525,4 +522,4 @@ class MacOSBackend(DeviceBackend):
             None, Quartz.kCGEventLeftMouseUp,
             Quartz.CGPointMake(dst[0], dst[1]), Quartz.kCGMouseButtonLeft)
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
-        return ActionResult(True, action, detail="swipe executed", method="cg-drag")
+        return ActionResult(True, action, detail="swipe 已执行", method="cg-drag")

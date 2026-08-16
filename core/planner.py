@@ -1,8 +1,7 @@
-"""Task planning: decompose a high-level goal into sub-goals.
+"""任务规划：把高层目标分解为子目标。
 
-Phase 1 keeps planning light: the LLM is given the full goal and decides
-step-by-step in the loop. A dedicated plan() that returns a checklist for
-long tasks is the next increment (Roadmap).
+第一阶段保持轻量：LLM 拿到完整目标，在循环里逐步决策。
+后续增量（Roadmap）是专门的 plan()，为长任务返回检查清单。
 """
 
 from __future__ import annotations
@@ -16,17 +15,17 @@ from llm.client import LLMClient
 @dataclass
 class Plan:
     goal: str
-    steps: list[str] = field(default_factory=list)  # human-readable sub-goals
+    steps: list[str] = field(default_factory=list)  # 人类可读的子目标
 
 
 class Planner:
-    """Produces an optional step checklist for the goal."""
+    """为目标产出可选的步骤检查清单。"""
 
     def __init__(self, llm: Optional[LLMClient] = None):
         self.llm = llm
 
     def plan(self, goal: str) -> Plan:
         if self.llm is None:
-            # No dedicated planning model yet: return the goal as a single step.
+            # 尚无专门的规划模型：把目标作为单步返回。
             return Plan(goal=goal, steps=[goal])
         raise NotImplementedError('LLM-backed planning lands in the next increment')

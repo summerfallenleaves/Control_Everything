@@ -1,1 +1,1 @@
-"""Device backends: one implementation per platform."""
+"""设备后端：每个平台一个实现。"""

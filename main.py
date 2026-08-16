@@ -1,10 +1,10 @@
-"""Control_Everything CLI entry point.
+"""Control_Everything 的 CLI 入口。
 
-Run an autonomous GUI agent against a device:
+对设备运行自主 GUI Agent：
 
-  uv run python main.py --goal "open Safari" --platform macos
-  uv run python main.py --goal "..." --platform macos --llm dummy  # offline smoke test
-  uv run python main.py --platform macos --inspect                  # dump UI tree only
+  uv run python main.py --goal "打开 Safari" --platform macos
+  uv run python main.py --goal "..." --platform macos --llm dummy  # 离线冒烟测试
+  uv run python main.py --platform macos --inspect                  # 仅导出 UI 树
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent / ".env")  # project .env, purpose-named vars
+load_dotenv(Path(__file__).resolve().parent / ".env")  # 项目 .env，按用途命名变量
 
 
 def _make_backend(platform: str, screenshot: bool):
@@ -29,7 +29,7 @@ def _make_backend(platform: str, screenshot: bool):
     if platform == 'ios':
         from backends.ios import IOSBackend
         return IOSBackend()
-    raise SystemExit(f'unknown platform: {platform}')
+    raise SystemExit(f'未知平台: {platform}')
 
 
 def _inspect(platform: str):
@@ -55,16 +55,16 @@ def _inspect(platform: str):
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog='control-everything')
     parser.add_argument('--platform', choices=['macos', 'android', 'ios'], default='macos')
-    parser.add_argument('--goal', help='task for the agent, e.g. "open Safari"')
+    parser.add_argument('--goal', help='Agent 的任务，例如 "打开 Safari"')
     parser.add_argument('--llm', choices=['auto', 'dummy'], default='auto',
-                help="'dummy' = offline smoke test; 'auto' = use .env DECISION_PROVIDER")
-    parser.add_argument('--model', default=None, help='override DECISION_MODEL from .env')
-    parser.add_argument('--provider', default=None, help='override DECISION_PROVIDER (anthropic|openai)')
+                help="'dummy' = 离线冒烟测试；'auto' = 使用 .env 的 DECISION_PROVIDER")
+    parser.add_argument('--model', default=None, help='覆盖 .env 的 DECISION_MODEL')
+    parser.add_argument('--provider', default=None, help='覆盖 DECISION_PROVIDER（anthropic|openai）')
     parser.add_argument('--max-steps', type=int, default=20)
-    parser.add_argument('--no-verify', action='store_true', help='disable step verification')
-    parser.add_argument('--no-screenshot', action='store_true', help='skip screenshots')
-    parser.add_argument('--no-vision', action='store_true', help='disable the vision model')
-    parser.add_argument('--inspect', action='store_true', help='dump the UI tree and exit')
+    parser.add_argument('--no-verify', action='store_true', help='禁用步骤验证')
+    parser.add_argument('--no-screenshot', action='store_true', help='跳过截图')
+    parser.add_argument('--no-vision', action='store_true', help='禁用视觉模型')
+    parser.add_argument('--inspect', action='store_true', help='导出 UI 树后退出')
     args = parser.parse_args(argv)
 
     if args.inspect:
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if not args.goal:
-        parser.error('--goal is required unless --inspect is used')
+        parser.error('除非使用 --inspect，否则 --goal 必填')
 
     backend = _make_backend(args.platform, screenshot=not args.no_screenshot)
     from llm.client import get_client
@@ -85,9 +85,9 @@ def main(argv: list[str] | None = None) -> int:
     if not args.no_vision and not args.no_screenshot:
         try:
             vision = get_client(purpose='vision')
-            print(f'vision enabled: {type(vision).__name__} model={vision.model}')
+            print(f'视觉已启用: {type(vision).__name__} model={vision.model}')
         except Exception as e:
-            print(f'vision disabled: {e}')
+            print(f'视觉已禁用: {e}')
 
     try:
         vision_interval = max(1, int(os.getenv('VISION_INTERVAL', '3')))
@@ -101,11 +101,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     result = orch.run(args.goal)
 
-    print(f'goal: {result.goal}')
-    print(f'ok: {result.ok}  steps: {result.steps}  duration: {result.duration_s:.1f}s')
+    print(f'目标: {result.goal}')
+    print(f'成功: {result.ok}  步数: {result.steps}  耗时: {result.duration_s:.1f}s')
     if result.last_error:
-        print(f'error: {result.last_error}')
-    print('--- history ---')
+        print(f'错误: {result.last_error}')
+    print('--- 历史 ---')
     for h in result.history:
         print(' ', h)
     return 0 if result.ok else 1
