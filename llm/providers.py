@@ -74,6 +74,7 @@ class ProviderConfig:
     model: str
     api_key: str = ""
     base_url: Optional[str] = None
+    thinking: Optional[str] = None  # enabled/disabled/auto (DeepSeek & friends)
 
     @property
     def is_anthropic(self) -> bool:
@@ -87,6 +88,7 @@ def load_provider_config(
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
+    thinking: Optional[str] = None,
 ) -> ProviderConfig:
     """Load a provider config from environment (overridable per call).
 
@@ -119,10 +121,15 @@ def load_provider_config(
     if not model_name:
         raise ValueError(f"{P}_MODEL not set; see .env.example")
 
+    thinking_value = thinking or os.getenv(f'{P}_THINKING') or None
+    if thinking_value not in (None, 'enabled', 'disabled', 'auto'):
+        raise ValueError(f'{P}_THINKING must be enabled/disabled/auto, got {thinking_value!r}')
+
     return ProviderConfig(
         purpose=purpose,
         provider=provider_name,
         model=model_name,
         api_key=key,
         base_url=base_url or os.getenv(f'{P}_BASE_URL') or None,
+        thinking=thinking_value,
     )

@@ -147,11 +147,17 @@ class OpenAIClient(LLMClient):
         # Local endpoints (Ollama etc.) accept any non-empty key.
         self._client = openai.OpenAI(api_key=cfg.api_key or "not-needed", **kwargs)
         self.model = cfg.model
+        self._cfg = cfg
 
     def decide(self, goal: str, state: ScreenState, history: list[str]) -> Action:
+        extra: dict = {}
+        if self._cfg.thinking:  # DeepSeek & compatible endpoints
+            # DeepSeek thinking mode forbids forced tool_choice; explicit
+            # thinking config disables/enables it accordingly.
+            extra["extra_body"] = {"thinking": {"type": self._cfg.thinking}}
         resp = self._client.chat.completions.create(
             model=self.model,
-            max_tokens=512,
+            max_tokens=2048,
             tools=[{
                 "type": "function",
                 "function": {"name": "gui_action",
@@ -161,6 +167,7 @@ class OpenAIClient(LLMClient):
             tool_choice={"type": "function", "function": {"name": "gui_action"}},
             messages=[{'role': 'user', 'content': OBSERVATION_PROMPT + chr(10) + chr(10) +
                       _build_user_message(goal, state, history)}],
+            **extra,
         )
         msg = resp.choices[0].message
         if msg.tool_calls:
