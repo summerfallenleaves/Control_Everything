@@ -64,12 +64,16 @@ def _build_user_message(goal: str, state: ScreenState, history: list[str]) -> st
     NL = chr(10)
     tree_text = NL.join(_tree_to_text(state.tree))
     prev = NL.join(history[-6:]) if history else '(none)'
-    return (
-        f'Goal: {goal}{NL}{NL}'
-        f'Platform: {state.platform}, app: {state.app}{NL}{NL}'
-        f'UI tree:{NL}{tree_text}{NL}{NL}'
-        f'Previous actions:{NL}' + prev
-    )
+    vision_note = state.meta.get('vision_note') if state.meta else None
+    parts = [
+        f'Goal: {goal}{NL}{NL}',
+        f'Platform: {state.platform}, app: {state.app}{NL}{NL}',
+    ]
+    if vision_note:
+        parts.append(f'Vision analysis of the screenshot:{NL}{vision_note}{NL}{NL}')
+    parts.append(f'UI tree:{NL}{tree_text}{NL}{NL}')
+    parts.append(f'Previous actions:{NL}' + prev)
+    return ''.join(parts)
 
 
 def _effort_for_openai(effort: str, vendor: str) -> str:
@@ -246,6 +250,9 @@ def get_client(
     cfg = load_provider_config(
         purpose, provider=provider, model=model, api_key=api_key, base_url=base_url
     )
+    if purpose == 'vision':
+        from llm.vision import VisionClient
+        return VisionClient(cfg)
     if cfg.provider == PROVIDER_ANTHROPIC:
         return AnthropicClient(cfg)
     return OpenAIClient(cfg)

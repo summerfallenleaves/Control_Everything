@@ -63,6 +63,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--max-steps', type=int, default=20)
     parser.add_argument('--no-verify', action='store_true', help='disable step verification')
     parser.add_argument('--no-screenshot', action='store_true', help='skip screenshots')
+    parser.add_argument('--no-vision', action='store_true', help='disable the vision model')
     parser.add_argument('--inspect', action='store_true', help='dump the UI tree and exit')
     args = parser.parse_args(argv)
 
@@ -80,8 +81,19 @@ def main(argv: list[str] | None = None) -> int:
         purpose='decision', name=name, provider=args.provider, model=args.model
     )
 
+    vision = None
+    if not args.no_vision and not args.no_screenshot:
+        try:
+            vision = get_client(purpose='vision')
+            print(f'vision enabled: {type(vision).__name__} model={vision.model}')
+        except Exception as e:
+            print(f'vision disabled: {e}')
+
     from core.orchestrator import AgentOrchestrator
-    orch = AgentOrchestrator(backend, llm, max_steps=args.max_steps, verify=not args.no_verify)
+    orch = AgentOrchestrator(
+        backend, llm, max_steps=args.max_steps, verify=not args.no_verify,
+        vision=vision,
+    )
     result = orch.run(args.goal)
 
     print(f'goal: {result.goal}')

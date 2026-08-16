@@ -35,12 +35,14 @@ class AgentOrchestrator:
         max_steps: int = 20,
         verify: bool = True,
         max_text_rounds: int = 3,
+        vision=None,
     ):
         self.backend = backend
         self.llm = llm
         self.max_steps = max_steps
         self.verify_enabled = verify
         self.max_text_rounds = max_text_rounds
+        self.vision = vision
         self.history: list[str] = []
 
     def run(self, goal: str) -> RunResult:
@@ -54,6 +56,18 @@ class AgentOrchestrator:
             except Exception as e:
                 result.last_error = f'perceive failed: {e}'
                 return result
+
+            if self.vision is not None and state.screenshot is not None:
+                try:
+                    note = self.vision.describe(
+                        state.screenshot, goal=goal,
+                        platform=state.platform, app=state.app,
+                    )
+                    if note:
+                        state.meta['vision_note'] = note
+                        self.history.append(f'  vision: {note[:150]}')
+                except Exception as e:
+                    self.history.append(f'  vision skipped: {e}')
 
             decision: Decision = self.llm.decide(goal, state, self.history)
 
