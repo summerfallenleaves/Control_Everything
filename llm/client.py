@@ -16,7 +16,7 @@ import abc
 import json
 from typing import Optional
 
-from core.types import Action, ScreenState
+from core.types import Action, Decision, ScreenState
 from llm.providers import PROVIDER_ANTHROPIC, ProviderConfig, load_provider_config
 from llm.schema import ACTION_SCHEMA, OBSERVATION_PROMPT
 
@@ -26,10 +26,14 @@ class LLMError(Exception):
 
 
 class LLMClient(abc.ABC):
-    """Turns observations into the next unified Action."""
+    """Turns observations into a Decision (an Action, or plain text).
+
+    Relaxed mode: tool_choice is auto, so the model may reply with text
+    (an observation / plan / wait request) instead of an action.
+    """
 
     @abc.abstractmethod
-    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Action:
+    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Decision:
         ...
 
 
@@ -66,6 +70,22 @@ def _build_user_message(goal: str, state: ScreenState, history: list[str]) -> st
         f'UI tree:{NL}{tree_text}{NL}{NL}'
         f'Previous actions:{NL}' + prev
     )
+
+
+def _effort_for_openai(effort: str, vendor: str) -> str:
+    """Map unified minimal/low/medium/high onto an endpoint's effort values.
+
+    OpenAI official accepts all four; DeepSeek accepts low/high/max
+    (medium maps to high server-side), so low tiers collapse to low.
+    """
+    if vendor == 'deepseek':
+        return {'minimal': 'low', 'low': 'low', 'medium': 'high', 'high': 'high'}.get(effort, 'high')
+    return effort
+
+
+def _budget_for_effort(effort: str) -> int:
+    """Anthropic budget_tokens for an effort level (>=1024 required)."""
+    return {'minimal': 1024, 'low': 2048, 'medium': 4096, 'high': 8192}.get(effort or 'medium', 4096)
 
 
 def _action_from_json(data: dict) -> Action:
@@ -108,11 +128,17 @@ class AnthropicClient(LLMClient):
             kwargs["base_url"] = cfg.base_url
         self._client = anthropic.Anthropic(api_key=cfg.api_key, **kwargs)
         self.model = cfg.model
+        self._cfg = cfg
 
-    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Action:
+    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Decision:
+        kwargs: dict = {}
+        if self._cfg.thinking == 'enabled':
+            budget = _budget_for_effort(self._cfg.thinking_effort or 'medium')
+            kwargs['thinking'] = {'type': 'enabled', 'budget_tokens': budget}
+            kwargs['max_tokens'] = max(8192, budget * 2)
         resp = self._client.messages.create(
             model=self.model,
-            max_tokens=512,
+            max_tokens=kwargs.pop('max_tokens', 4096),
             tools=[{
                 "name": "gui_action",
                 "description": "Emit the next GUI action as one JSON object.",
@@ -122,11 +148,17 @@ class AnthropicClient(LLMClient):
                 {'type': 'text', 'text': OBSERVATION_PROMPT},
                 {'type': 'text', 'text': _build_user_message(goal, state, history)},
             ]}],
+            **kwargs,
         )
+        text_parts: list[str] = []
         for block in resp.content:
             if block.type == "tool_use" and block.name == "gui_action":
-                return _action_from_json(block.input)
-        raise LLMError("model did not return a gui_action tool call")
+                return Decision(action=_action_from_json(block.input))
+            if block.type == 'text' and block.text:
+                text_parts.append(block.text)
+        if text_parts:
+            return Decision(text=' '.join(text_parts).strip())
+        raise LLMError("model returned neither a tool call nor text")
 
 
 class OpenAIClient(LLMClient):
@@ -149,12 +181,15 @@ class OpenAIClient(LLMClient):
         self.model = cfg.model
         self._cfg = cfg
 
-    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Action:
+    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Decision:
+        """Relaxed mode: tool_choice=auto; the model may reply with text."""
         extra: dict = {}
+        kwargs: dict = {}
         if self._cfg.thinking:  # DeepSeek & compatible endpoints
-            # DeepSeek thinking mode forbids forced tool_choice; explicit
-            # thinking config disables/enables it accordingly.
             extra["extra_body"] = {"thinking": {"type": self._cfg.thinking}}
+        if (self._cfg.thinking_effort and self._cfg.thinking != 'disabled'):
+            kwargs["reasoning_effort"] = _effort_for_openai(
+                self._cfg.thinking_effort, self._cfg.vendor)
         resp = self._client.chat.completions.create(
             model=self.model,
             max_tokens=2048,
@@ -164,16 +199,19 @@ class OpenAIClient(LLMClient):
                     "description": "Emit the next GUI action as one JSON object.",
                     "parameters": ACTION_SCHEMA},
             }],
-            tool_choice={"type": "function", "function": {"name": "gui_action"}},
             messages=[{'role': 'user', 'content': OBSERVATION_PROMPT + chr(10) + chr(10) +
                       _build_user_message(goal, state, history)}],
             **extra,
+            **kwargs,
         )
         msg = resp.choices[0].message
         if msg.tool_calls:
             args = json.loads(msg.tool_calls[0].function.arguments)
-            return _action_from_json(args)
-        raise LLMError("model did not return a gui_action tool call")
+            return Decision(action=_action_from_json(args))
+        text = (msg.content or '').strip()
+        if text:
+            return Decision(text=text)
+        raise LLMError("model returned neither a tool call nor text")
 
 
 class DummyClient(LLMClient):
@@ -182,10 +220,10 @@ class DummyClient(LLMClient):
     def __init__(self, steps: int = 1):
         self._steps = steps
 
-    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Action:
+    def decide(self, goal: str, state: ScreenState, history: list[str]) -> Decision:
         if len(history) >= self._steps:
-            return Action(kind="done", note="dummy client finished")
-        return Action(kind="wait", duration_s=0.1, note="dummy client: waiting")
+            return Decision(action=Action(kind="done", note="dummy client finished"))
+        return Decision(action=Action(kind="wait", duration_s=0.1, note="dummy client: waiting"))
 
 
 def get_client(

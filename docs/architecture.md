@@ -106,5 +106,7 @@ control_everything/
 | 验证 | 独立 verify 模块、可开关 | AX 读回不可靠，需启发式 |
 | MCP | 先做自有 orchestrator，预留封装层 | 控制权归属清晰，生态兼容后期加 |
 | 模型配置 | .env 按用途提供**完整 provider 块**（{PURPOSE}_PROVIDER/BASE_URL/API_KEY/MODEL） | 换供应商（Anthropic/DeepSeek/Ollama）不动代码 |
+| 决策模式 | **宽松 tool_choice=auto**：模型可输出文本或动作（Decision） | 灵活性提升；orchestrator 有文本防死循环保护 |
+| 思考控制 | {PURPOSE}_THINKING(enabled/disabled/auto) + {PURPOSE}_THINKING_EFFORT(minimal/low/medium/high) | 按供应商映射（DeepSeek low/high/max、Anthropic budget_tokens） |
 | Provider 归一化 | anthropic + openai 两套 SDK；兼容端点别名归一为 openai | DeepSeek/Moonshot/Qwen/Ollama/vLLM 全覆盖 |
 | 手机扩展 | 新增 backend + 解析器即可 | 数据模型三端同构 |

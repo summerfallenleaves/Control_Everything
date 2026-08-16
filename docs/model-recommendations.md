@@ -132,6 +132,22 @@ DECISION_API_KEY=sk-or-xxxx
 DECISION_MODEL=deepseek/deepseek-v4-flash   # OpenRouter 上也有低价模型
 ```
 
+## 思考模式配置（DeepSeek）
+
+DeepSeek 默认**思考开启且 effort=high**。GUI agent 每步实时决策建议：
+
+```ini
+DECISION_THINKING=disabled          # 快速稳定（推荐）
+# 需要更强推理时：
+# DECISION_THINKING=enabled
+# DECISION_THINKING_EFFORT=medium   # minimal/low/medium/high
+```
+
+注意：DeepSeek 只接受 effort 值 low/high/max（medium 映射为 high）；
+思考模式下不支持强制 tool_choice，故 agent 采用宽松模式（auto），
+orchestrator 可接受模型输出文本（观察/等待）。
+
+
 ## 省钱要点
 
 1. **DeepSeek 错峰**：北京时间 09:00-12:00 & 14:00-18:00 是峰时（2 倍价），

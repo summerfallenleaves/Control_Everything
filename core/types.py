@@ -156,3 +156,20 @@ class ActionResult:
     detail: str = ""
     method: str = ""        # which underlying mechanism ran (ax-press, cg-click...)
     error: str | None = None
+
+
+@dataclass
+class Decision:
+    """What the LLM decided on one step.
+
+    Relaxed (auto) tool_choice means the model may respond with plain text
+    (an observation, a wait request, a plan) instead of an action. The
+    orchestrator logs text and loops; it acts only on `action`.
+    """
+
+    action: Action | None = None
+    text: str = ""
+
+    @property
+    def is_action(self) -> bool:
+        return self.action is not None

@@ -70,11 +70,13 @@ class ProviderConfig:
     """Complete configuration for one model role."""
 
     purpose: str  # decision | planning | vision
-    provider: str  # anthropic | openai
+    provider: str  # normalized: anthropic | openai
     model: str
+    vendor: str = ""  # original alias: deepseek / openai / qwen / ...
     api_key: str = ""
     base_url: Optional[str] = None
     thinking: Optional[str] = None  # enabled/disabled/auto (DeepSeek & friends)
+    thinking_effort: Optional[str] = None  # minimal/low/medium/high
 
     @property
     def is_anthropic(self) -> bool:
@@ -89,6 +91,7 @@ def load_provider_config(
     api_key: Optional[str] = None,
     base_url: Optional[str] = None,
     thinking: Optional[str] = None,
+    thinking_effort: Optional[str] = None,
 ) -> ProviderConfig:
     """Load a provider config from environment (overridable per call).
 
@@ -104,6 +107,7 @@ def load_provider_config(
         # legacy fallback: no provider configured -> anthropic
         provider_name = PROVIDER_ANTHROPIC
     provider_name = provider_name.lower().replace('-', '_')
+    vendor_name = provider_name
     if provider_name in OPENAI_COMPATIBLE_ALIASES:
         provider_name = PROVIDER_OPENAI
     if provider_name not in SUPPORTED_PROVIDERS:
@@ -125,11 +129,19 @@ def load_provider_config(
     if thinking_value not in (None, 'enabled', 'disabled', 'auto'):
         raise ValueError(f'{P}_THINKING must be enabled/disabled/auto, got {thinking_value!r}')
 
+    effort_value = thinking_effort or os.getenv(f'{P}_THINKING_EFFORT') or None
+    if effort_value not in (None, 'minimal', 'low', 'medium', 'high'):
+        raise ValueError(
+            f'{P}_THINKING_EFFORT must be minimal/low/medium/high, got {effort_value!r}'
+        )
+
     return ProviderConfig(
         purpose=purpose,
         provider=provider_name,
+        vendor=vendor_name,
         model=model_name,
         api_key=key,
         base_url=base_url or os.getenv(f'{P}_BASE_URL') or None,
         thinking=thinking_value,
+        thinking_effort=effort_value,
     )

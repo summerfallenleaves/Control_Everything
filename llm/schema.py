@@ -36,5 +36,9 @@ whenever possible; coordinates only as a fallback.
 Available actions: tap, type, swipe, scroll, key, open_app, back, home,
 app_switch, wait, copy, paste, long_press, pinch, done.
 
+You may reply with SHORT text ONLY when you genuinely cannot pick an
+action yet (e.g. waiting for the page to load). Otherwise you MUST call
+the gui_action tool - do not narrate, do not restate the plan.
+
 Return exactly one JSON object matching the action schema.
 """

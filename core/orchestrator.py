@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from backends.base import DeviceBackend
-from core.types import Action, ActionResult, ScreenState
+from core.types import Action, ActionResult, Decision, ScreenState
 from core.verify import VerificationResult, verify_step
 from llm.client import LLMClient
 
@@ -34,11 +34,13 @@ class AgentOrchestrator:
         llm: LLMClient,
         max_steps: int = 20,
         verify: bool = True,
+        max_text_rounds: int = 3,
     ):
         self.backend = backend
         self.llm = llm
         self.max_steps = max_steps
         self.verify_enabled = verify
+        self.max_text_rounds = max_text_rounds
         self.history: list[str] = []
 
     def run(self, goal: str) -> RunResult:
@@ -53,7 +55,27 @@ class AgentOrchestrator:
                 result.last_error = f'perceive failed: {e}'
                 return result
 
-            action = self.llm.decide(goal, state, self.history)
+            decision: Decision = self.llm.decide(goal, state, self.history)
+
+            if not decision.is_action:
+                # Relaxed mode: the model replied with text (an observation / plan).
+                # Log it, guard against text-only loops, and re-observe.
+                text = decision.text.strip()
+                self.history.append(f'model: {text[:200]}')
+                if not text:
+                    result.last_error = 'model returned empty text'
+                    return result
+                recent = self.history[-self.max_text_rounds:]
+                if (len(recent) >= self.max_text_rounds
+                        and all(h.startswith('model: ') for h in recent)):
+                    result.last_error = (
+                        f'model produced only text for {self.max_text_rounds} rounds '
+                        '(no actions); treat as stuck'
+                    )
+                    return result
+                continue
+
+            action: Action = decision.action
 
             if action.kind == 'done':
                 result.ok = True
