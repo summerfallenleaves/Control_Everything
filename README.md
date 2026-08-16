@@ -113,6 +113,8 @@ VISION_MODEL=qwen2.5-vl
 
 ## Architecture
 
+Recommended model setups (DeepSeek / Qwen / OpenRouter):
+[docs/model-recommendations.md](docs/model-recommendations.md).
 See [docs/architecture.md](docs/architecture.md) for the full design - especially
 how the unified `Element` tree + `Action` space keeps the agent loop
 platform-agnostic, and how Android / iOS slot in as new `DeviceBackend`s.
