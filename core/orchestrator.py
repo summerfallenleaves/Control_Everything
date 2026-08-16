@@ -73,7 +73,9 @@ class AgentOrchestrator:
             if self.verify_enabled:
                 try:
                     new_state = self.backend.perceive()
-                    v: VerificationResult = verify_step(prev_state, action, act_result, new_state)
+                    v: VerificationResult = verify_step(
+                        prev_state, action, act_result, new_state, backend=self.backend
+                    )
                     self.history.append(f'  verify: {v.summary}')
                     prev_state = new_state
                     if not v.ok and v.fatal:

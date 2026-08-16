@@ -71,5 +71,13 @@ class DeviceBackend(abc.ABC):
 
     # -- helpers -------------------------------------------------------------
 
+    def is_app_running(self, app_id: str) -> bool:
+        """Whether an app (bundle id or name) is currently running.
+
+        Base implementation returns False; backends override with a real
+        check (NSWorkspace / adb shell ps / WDA app state).
+        """
+        return False
+
     def close(self) -> None:
         """Release resources; called at the end of a session."""

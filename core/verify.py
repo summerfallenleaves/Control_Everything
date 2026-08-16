@@ -25,10 +25,17 @@ def verify_step(
     action: Action,
     result: ActionResult,
     current: ScreenState,
+    backend=None,
 ) -> VerificationResult:
     """Heuristic verification of the last action."""
     if not result.ok:
         return VerificationResult(False, f'action reported failure: {result.error}', fatal=True)
+
+    if action.kind == 'open_app' and backend is not None and hasattr(backend, 'is_app_running'):
+        target = action.text or action.target or ''
+        if backend.is_app_running(target):
+            return VerificationResult(True, f'{target} is running')
+        return VerificationResult(False, f'{target} not yet running', fatal=False)
 
     if action.kind in ('wait', 'open_app', 'copy', 'paste', 'key', 'done'):
         return VerificationResult(True, 'no structural check for this action kind')

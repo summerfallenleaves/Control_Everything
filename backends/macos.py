@@ -200,6 +200,16 @@ class MacOSBackend(DeviceBackend):
                     node.children.append(child)
         return node
 
+    def is_app_running(self, app_id: str) -> bool:
+        """True if an app with this bundle id / name is in the running list."""
+        apps = AppKit.NSWorkspace.sharedWorkspace().runningApplications()
+        for a in apps:
+            bid = a.bundleIdentifier() or ""
+            name = a.localizedName() or ""
+            if app_id in (bid, name) or bid == app_id or name == app_id:
+                return True
+        return False
+
     # -- element resolution --------------------------------------------------
 
     def _find_ax(self, ref: str):
@@ -256,8 +266,14 @@ class MacOSBackend(DeviceBackend):
             return ActionResult(True, action, detail=f"waited {action.duration_s}s", method="sleep")
         if kind == "open_app":
             name = action.text or action.target or ""
-            subprocess.run(["open", "-a", name], check=False)
-            return ActionResult(True, action, detail=f"launched {name}", method="open")
+            # bundle ids (com.apple.calculator) need `open -b`; app names need `open -a`
+            if "." in name and not name.endswith(".app"):
+                subprocess.run(["open", "-b", name], check=False)
+                detail = f"launched bundle {name}"
+            else:
+                subprocess.run(["open", "-a", name], check=False)
+                detail = f"launched {name}"
+            return ActionResult(True, action, detail=detail, method="open")
         if kind in ("back", "home", "app_switch"):
             return ActionResult(True, action, detail=f"{kind} is a no-op on macOS", method="noop")
         if kind == "copy":
