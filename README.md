@@ -69,9 +69,24 @@ macOS backends additionally need **Accessibility** and **Screen Recording** perm
 ```bash
 uv sync                                            # create venv & install deps
 uv run python main.py --platform macos --inspect   # dump the current UI tree
-uv run python main.py --goal "open Safari" --platform macos   # run the agent (needs ANTHROPIC_API_KEY)
+uv run python main.py --goal "open Safari" --platform macos   # run the agent
 uv run python main.py --goal "..." --llm dummy --platform macos # offline smoke test
 ```
+
+### Configuration (`.env`, named by purpose)
+
+Copy [`.env.example`](.env.example) to `.env` and fill in the API key. Model
+variables are named by **purpose**, not model name, so swapping models never
+touches code:
+
+| Variable | Purpose | Example |
+|---|---|---|
+| `DECISION_MODEL` | next-action decision (required) | `claude-sonnet-4-5` |
+| `PLANNING_MODEL` | task decomposition (reserved) | `claude-sonnet-4-5` |
+| `VISION_MODEL` | screenshot understanding fallback (reserved) | `qwen2.5-vl` |
+| `ANTHROPIC_API_KEY` | provider key | `sk-ant-...` |
+
+`.env` is git-ignored; commit only `.env.example`.
 
 ## Architecture
 

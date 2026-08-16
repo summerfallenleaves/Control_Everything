@@ -8,7 +8,10 @@ DummyClient exists for offline smoke tests / demos.
 from __future__ import annotations
 
 import abc
+import os
 from typing import Optional
+
+from dotenv import load_dotenv
 
 from core.types import Action, ScreenState
 from llm.schema import ACTION_SCHEMA, OBSERVATION_PROMPT
@@ -50,18 +53,25 @@ def _tree_to_text(tree, depth: int = 0, limit: int = 200) -> list[str]:
 
 
 class AnthropicClient(LLMClient):
-    """Anthropic Messages API with tool-use constrained to one action."""
+    """Anthropic Messages API with tool-use constrained to one action.
 
-    def __init__(self, api_key: Optional[str] = None, model: str = "claude-sonnet-4-5"):
+    Model and key come from environment variables named by PURPOSE:
+      DECISION_MODEL     - model used to pick the next action
+      ANTHROPIC_API_KEY  - provider key
+    """
+
+    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        load_dotenv()  # idempotent; also loads when used outside main.py
         try:
             import anthropic
         except ImportError as e:
             raise LLMError("anthropic package not installed; `uv add anthropic`") from e
         if not api_key:
-            import os
             api_key = os.environ.get('ANTHROPIC_API_KEY')
         if not api_key:
-            raise LLMError("ANTHROPIC_API_KEY not set")
+            raise LLMError("ANTHROPIC_API_KEY not set (see .env.example)")
+        if not model:
+            model = os.environ.get("DECISION_MODEL") or "claude-sonnet-4-5"
         self._client = anthropic.Anthropic(api_key=api_key)
         self.model = model
 

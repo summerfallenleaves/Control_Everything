@@ -10,4 +10,5 @@ dependencies = [
     "pyobjc-framework-applicationservices>=12.2.2 ; sys_platform == 'darwin'",
     "pyobjc-framework-cocoa>=12.2.2 ; sys_platform == 'darwin'",
     "pyobjc-framework-quartz>=12.2.2 ; sys_platform == 'darwin'",
+    "python-dotenv>=1.2.2",
 ]
