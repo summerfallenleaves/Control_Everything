@@ -105,5 +105,6 @@ control_everything/
 | 控制策略 | 三层混合（AX -> CGEvent -> 视觉） | 自绘 UI / Electron 兜底 |
 | 验证 | 独立 verify 模块、可开关 | AX 读回不可靠，需启发式 |
 | MCP | 先做自有 orchestrator，预留封装层 | 控制权归属清晰，生态兼容后期加 |
-| 模型配置 | .env 按用途命名（DECISION_MODEL/PLANNING_MODEL/VISION_MODEL） | 换模型不动代码，语义清晰 |
+| 模型配置 | .env 按用途提供**完整 provider 块**（{PURPOSE}_PROVIDER/BASE_URL/API_KEY/MODEL） | 换供应商（Anthropic/DeepSeek/Ollama）不动代码 |
+| Provider 归一化 | anthropic + openai 两套 SDK；兼容端点别名归一为 openai | DeepSeek/Moonshot/Qwen/Ollama/vLLM 全覆盖 |
 | 手机扩展 | 新增 backend + 解析器即可 | 数据模型三端同构 |

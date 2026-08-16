@@ -73,20 +73,43 @@ uv run python main.py --goal "open Safari" --platform macos   # run the agent
 uv run python main.py --goal "..." --llm dummy --platform macos # offline smoke test
 ```
 
-### Configuration (`.env`, named by purpose)
+### Configuration (`.env`, full provider per purpose)
 
-Copy [`.env.example`](.env.example) to `.env` and fill in the API key. Model
-variables are named by **purpose**, not model name, so swapping models never
-touches code:
+Copy [`.env.example`](.env.example) to `.env`. Each purpose is a **complete
+provider block**, so any vendor can back any role without code changes:
 
-| Variable | Purpose | Example |
-|---|---|---|
-| `DECISION_MODEL` | next-action decision (required) | `claude-sonnet-4-5` |
-| `PLANNING_MODEL` | task decomposition (reserved) | `claude-sonnet-4-5` |
-| `VISION_MODEL` | screenshot understanding fallback (reserved) | `qwen2.5-vl` |
-| `ANTHROPIC_API_KEY` | provider key | `sk-ant-...` |
+```
+# {PURPOSE}_PROVIDER  anthropic | openai (openai covers OpenAI-compatible endpoints)
+# {PURPOSE}_BASE_URL  endpoint (empty = provider default)
+# {PURPOSE}_API_KEY   authentication
+# {PURPOSE}_MODEL     model id
+DECISION_PROVIDER=anthropic
+DECISION_BASE_URL=
+DECISION_API_KEY=sk-ant-...
+DECISION_MODEL=claude-sonnet-4-5
+```
 
-`.env` is git-ignored; commit only `.env.example`.
+Supported providers: **anthropic** (official or compatible) and **openai**
+(any OpenAI-compatible endpoint - DeepSeek, Moonshot, Qwen, Ollama, vLLM,
+LM Studio...).
+
+Examples:
+
+```
+# DeepSeek as the decision brain
+DECISION_PROVIDER=openai
+DECISION_BASE_URL=https://api.deepseek.com
+DECISION_API_KEY=sk-...
+DECISION_MODEL=deepseek-chat
+
+# Local Qwen via Ollama as vision fallback
+VISION_PROVIDER=openai
+VISION_BASE_URL=http://localhost:11434/v1
+VISION_MODEL=qwen2.5-vl
+```
+
+`.env` is git-ignored; commit only `.env.example`. CLI overrides: `--provider`,
+`--model`, `--llm dummy` (offline smoke test).
 
 ## Architecture
 

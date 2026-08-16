@@ -55,8 +55,10 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog='control-everything')
     parser.add_argument('--platform', choices=['macos', 'android', 'ios'], default='macos')
     parser.add_argument('--goal', help='task for the agent, e.g. "open Safari"')
-    parser.add_argument('--llm', choices=['anthropic', 'dummy'], default='anthropic')
+    parser.add_argument('--llm', choices=['auto', 'dummy'], default='auto',
+                help="'dummy' = offline smoke test; 'auto' = use .env DECISION_PROVIDER")
     parser.add_argument('--model', default=None, help='override DECISION_MODEL from .env')
+    parser.add_argument('--provider', default=None, help='override DECISION_PROVIDER (anthropic|openai)')
     parser.add_argument('--max-steps', type=int, default=20)
     parser.add_argument('--no-verify', action='store_true', help='disable step verification')
     parser.add_argument('--no-screenshot', action='store_true', help='skip screenshots')
@@ -72,8 +74,10 @@ def main(argv: list[str] | None = None) -> int:
 
     backend = _make_backend(args.platform, screenshot=not args.no_screenshot)
     from llm.client import get_client
-    model = args.model or os.getenv('DECISION_MODEL') or 'claude-sonnet-4-5'
-    llm = get_client(args.llm, model=model)
+    name = 'dummy' if args.llm == 'dummy' else None
+    llm = get_client(
+        purpose='decision', name=name, provider=args.provider, model=args.model
+    )
 
     from core.orchestrator import AgentOrchestrator
     orch = AgentOrchestrator(backend, llm, max_steps=args.max_steps, verify=not args.no_verify)
