@@ -36,7 +36,7 @@ PLANNING_MODEL=deepseek-v4-flash
 VISION_PROVIDER=qwen
 VISION_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 VISION_API_KEY=sk-xxxx
-VISION_MODEL=qwen-vl-max
+VISION_MODEL=qwen3.7-plus
 ```
 
 ## 方案 B：极致省钱（大批量/高频）
@@ -57,7 +57,7 @@ PLANNING_MODEL=qwen3.5-flash
 VISION_PROVIDER=qwen
 VISION_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 VISION_API_KEY=sk-xxxx
-VISION_MODEL=qwen-vl-plus
+VISION_MODEL=qwen3.7-flash
 ```
 
 ## 方案 C：效果优先（低成本档内最强）
@@ -79,7 +79,7 @@ PLANNING_MODEL=deepseek-v4-flash
 VISION_PROVIDER=qwen
 VISION_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 VISION_API_KEY=sk-xxxx
-VISION_MODEL=qwen-vl-max
+VISION_MODEL=qwen3.7-plus
 ```
 
 ## 为什么这样选
@@ -88,7 +88,37 @@ VISION_MODEL=qwen-vl-max
 |---|---|---|
 | 决策 | deepseek-v4-flash / qwen3.5-plus | GUI agent 每步都要实时决策：需要强工具调用、低延迟；两个都是该价位工具调用最稳的 |
 | 规划 | 与决策同款或 qwen3.5-flash | 任务分解频率低，对延迟不敏感，可以降档省钱 |
-| 视觉 | qwen-vl-max / qwen-vl-plus | 截图理解兜底，Qwen-VL 是低成本多模态首选 |
+| 视觉 | qwen3.7-plus / qwen3.7-flash | 百炼推荐的新一代统一多模态：支持 Function Calling + 结构化输出，正好匹配截图理解需求；DeepSeek 官方 API 纯文本无视觉 |
+
+
+## 视觉模型专项（效果优先）
+
+**重要事实：DeepSeek 官方 API 是纯文本**（2026-07 确认），`deepseek-v4-*` 均不支持
+图片输入，视觉必须走 Qwen（或 OpenRouter 上的 VLM）。
+
+百炼当前推荐的新一代统一多模态（旧版 qwen-vl-max/plus 已不作为新项目首选）：
+
+| 模型 | 能力 | 定位 |
+|---|---|---|
+| `qwen3.8-max` | 对应 GPT-5.5/Claude Opus 档位 | 效果最强，价格高（可不考虑） |
+| `qwen3.7-plus` | 1M 上下文、2h 视频、FC、结构化输出 | **旗舰多模态，效果优先首选** |
+| `qwen3.7-flash` | 同上（256 图/次） | 接近旗舰效果，成本更低 |
+| `qwen3.5-ocr` | 文档/表格/试卷/手写 OCR 优化 | OCR 专项（验证码/证件场景） |
+
+**为什么 qwen3.7 系列适合 GUI agent**：它们是统一多模态（图像+视频+文本），
+且支持 **Function Calling + 结构化输出**——视觉模型可以直接输出动作 JSON，
+正好覆盖「AX 树缺失时的截图理解兜底」，还能独立承担视觉决策。
+
+```ini
+# 效果优先视觉配置
+VISION_PROVIDER=qwen
+VISION_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+VISION_API_KEY=sk-xxxx
+VISION_MODEL=qwen3.7-plus
+
+# 性价比视觉配置（接近旗舰效果）
+# VISION_MODEL=qwen3.7-flash
+```
 
 ## OpenRouter 的定位
 
