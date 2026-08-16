@@ -12,10 +12,11 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-load_dotenv()  # .env -> env vars, named by purpose (DECISION_MODEL etc.)
+load_dotenv(Path(__file__).resolve().parent / ".env")  # project .env, purpose-named vars
 
 
 def _make_backend(platform: str, screenshot: bool):

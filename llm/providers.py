@@ -29,9 +29,18 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
+
+# Project root is two levels up from this file (llm/providers.py -> project/).
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_env() -> None:
+    """Load the project .env regardless of the caller's working directory."""
+    load_dotenv(_PROJECT_ROOT / ".env")
 
 PROVIDER_ANTHROPIC = "anthropic"
 PROVIDER_OPENAI = "openai"
@@ -85,7 +94,7 @@ def load_provider_config(
     to ANTHROPIC_API_KEY for keys when the purpose-specific key is empty,
     keeping old .env files working.
     """
-    load_dotenv()
+    _load_env()
     P = purpose.upper()
 
     provider_name = (provider or os.getenv(f'{P}_PROVIDER') or '')
