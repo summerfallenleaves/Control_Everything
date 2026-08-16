@@ -14,7 +14,7 @@ ACTION_SCHEMA = {
     "properties": {
         "kind": {"type": "string", "enum": ACTION_KINDS_LIST},
         "reasoning": {"type": "string", "description": "short rationale for the action"},
-        "target": {"type": ["string", "null"], "description": "element ref from the provided UI tree"},
+        "target": {"type": ["string", "null"], "description": "element ref: use ONLY the ref field value from the UI tree (e.g. \"axid:ShareButton\" or \"button#3\"), not the whole tree line"},
         "pos": {"type": ["object", "null"], "properties": {"x": {"type": "number"}, "y": {"type": "number"}},
                 "description": "normalized 0-1000 coordinate fallback"},
         "text": {"type": ["string", "null"], "description": "text to type / app id to open"},
@@ -39,6 +39,9 @@ app_switch, wait, copy, paste, long_press, pinch, done.
 You may reply with SHORT text ONLY when you genuinely cannot pick an
 action yet (e.g. waiting for the page to load). Otherwise you MUST call
 the gui_action tool - do not narrate, do not restate the plan.
+
+For element targeting, copy ONLY the ref value (e.g. 'axid:ShareButton'),
+never the whole UI-tree line.
 
 Return exactly one JSON object matching the action schema.
 """

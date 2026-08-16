@@ -279,27 +279,41 @@ class MacOSBackend(DeviceBackend):
         return None
 
     def _find_ax(self, ref: str):
-        """Locate a live AXUIElement by our ref (re-walk; refs are snapshot-local)."""
+        """Locate a live AXUIElement by our ref (re-walk; refs are snapshot-local).
+
+        Tolerant matching: LLMs sometimes paste the whole tree line
+        ("axid:X role=text_field text='...'") instead of just the ref. We try
+        the exact ref first, then its first whitespace-separated token.
+        """
         app = self._frontmost_app()
         app_ax = ax.AXUIElementCreateApplication(app.processIdentifier())
-        target = {"found": None}
 
-        def visit(el, depth, counter):
-            if target["found"] is not None or depth > self._max_depth:
-                return
-            role = self._role(el)
-            if self._ref(el, role, counter) == ref:
-                target["found"] = el
-                return
-            children = self._get(el, "AXChildren")
-            if children:
-                for c in children:
-                    visit(c, depth + 1, counter)
+        def walk_for(candidate: str):
+            target = {"found": None}
 
-        visit(app_ax, 0, {})
-        if target["found"] is None:
+            def visit(el, depth, counter):
+                if target["found"] is not None or depth > self._max_depth:
+                    return
+                role = self._role(el)
+                if self._ref(el, role, counter) == candidate:
+                    target["found"] = el
+                    return
+                children = self._get(el, "AXChildren")
+                if children:
+                    for c in children:
+                        visit(c, depth + 1, counter)
+
+            visit(app_ax, 0, {})
+            return target["found"]
+
+        found = walk_for(ref)
+        if found is None and ref:
+            first_token = ref.split()[0]
+            if first_token != ref:
+                found = walk_for(first_token)
+        if found is None:
             raise ElementNotFoundError(f"element ref not found in current snapshot: {ref}")
-        return target["found"]
+        return found
 
     def _resolve_pos(self, action: Action):
         """Element ref first, then normalized coordinates."""
