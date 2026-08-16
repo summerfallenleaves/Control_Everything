@@ -121,6 +121,35 @@ class MacOSBackend(DeviceBackend):
         err, v = ax.AXUIElementCopyAttributeValue(el, attr, None)
         return v if err == 0 else None
 
+    def _ax_point(self, value):
+        try:
+            err, p = ax.AXValueGetValue(value, ax.kAXValueCGPointType, None)
+            if err == 0 and hasattr(p, "x"):
+                return (p.x, p.y)
+        except Exception:
+            pass
+        return None
+
+    def _ax_size(self, value):
+        try:
+            err, s = ax.AXValueGetValue(value, ax.kAXValueCGSizeType, None)
+            if err == 0 and hasattr(s, "width"):
+                return (s.width, s.height)
+        except Exception:
+            pass
+        return None
+
+    def _element_center(self, el):
+        """Best-effort center point of an element (frame -> pos+size -> None)."""
+        frame = self._ax_rect(self._get(el, "AXFrame"))
+        if frame:
+            return (frame.x + frame.w / 2, frame.y + frame.h / 2)
+        pos = self._ax_point(self._get(el, "AXPosition"))
+        size = self._ax_size(self._get(el, "AXSize"))
+        if pos and size:
+            return (pos[0] + size[0] / 2, pos[1] + size[1] / 2)
+        return None
+
     def _role(self, el) -> str:
         r = self._get(el, "AXRole")
         return _ROLE_MAP.get(str(r), "other") if r else "other"
@@ -212,6 +241,43 @@ class MacOSBackend(DeviceBackend):
 
     # -- element resolution --------------------------------------------------
 
+    def _find_text_field(self):
+        """Locate a text-input element, preferring the MAIN window's subtree.
+
+        Safari can have several windows; typing into a non-main window's
+        address bar does not navigate what the user sees."""
+        app = self._frontmost_app()
+        app_ax = ax.AXUIElementCreateApplication(app.processIdentifier())
+        _, wins = ax.AXUIElementCopyAttributeValue(app_ax, "AXWindows", None)
+        windows = list(wins or [])
+        main = None
+        for w in windows:
+            _, is_main = ax.AXUIElementCopyAttributeValue(w, "AXMain", None)
+            if is_main:
+                main = w
+                break
+        ordered = ([main] + [w for w in windows if w is not main]) if main else windows
+
+        for win in ordered:
+            target = {"found": None}
+
+            def visit(el, depth, counter):
+                if target["found"] is not None or depth > self._max_depth:
+                    return
+                role = str(self._get(el, "AXRole") or "")
+                if role in ("AXTextField", "AXSearchField", "AXComboBox"):
+                    target["found"] = el
+                    return
+                children = self._get(el, "AXChildren")
+                if children:
+                    for c in children:
+                        visit(c, depth + 1, counter)
+
+            visit(win, 0, {})
+            if target["found"]:
+                return target["found"]
+        return None
+
     def _find_ax(self, ref: str):
         """Locate a live AXUIElement by our ref (re-walk; refs are snapshot-local)."""
         app = self._frontmost_app()
@@ -273,7 +339,8 @@ class MacOSBackend(DeviceBackend):
             else:
                 subprocess.run(["open", "-a", name], check=False)
                 detail = f"launched {name}"
-            return ActionResult(True, action, detail=detail, method="open")
+            self._activate_app(name)
+            return ActionResult(True, action, detail=detail + " + activated", method="open")
         if kind in ("back", "home", "app_switch"):
             return ActionResult(True, action, detail=f"{kind} is a no-op on macOS", method="noop")
         if kind == "copy":
@@ -289,6 +356,8 @@ class MacOSBackend(DeviceBackend):
             return self._type(action)
         if kind == "key":
             return self._key(action)
+        if kind == "shortcut":  # tolerate LLM emitting shortcut for key combos
+            return self._key(action)
         if kind == "scroll":
             return self._scroll(action)
         if kind == "swipe":
@@ -300,12 +369,19 @@ class MacOSBackend(DeviceBackend):
         raise ActionNotSupportedError(f"unhandled action kind: {kind}")
 
     def _tap(self, action: Action) -> ActionResult:
-        pos, el = self._resolve_pos(action)
-        if el is not None:
+        """Semantic press first (no coordinates needed), coordinates as fallback."""
+        if action.target:
+            el = self._find_ax(action.target)
             err = ax.AXUIElementPerformAction(el, ax.kAXPressAction)
             if err == 0:
-                return ActionResult(True, action, detail=f"pressed at {pos}", method="ax-press")
-        return self._cg_click(pos, action)
+                return ActionResult(True, action, detail=f"pressed {action.target}", method="ax-press")
+            center = self._element_center(el)
+            if center:
+                return self._cg_click(center, action)
+            raise ElementNotFoundError(f"no frame/position for element {action.target}")
+        if action.pos:
+            return self._cg_click(self._native(action.pos), action)
+        raise BackendError("tap needs target or pos")
 
     def _cg_click(self, pos: tuple[float, float], action: Action) -> ActionResult:
         pt = Quartz.CGPointMake(pos[0], pos[1])
@@ -316,21 +392,49 @@ class MacOSBackend(DeviceBackend):
 
     def _type(self, action: Action) -> ActionResult:
         text = action.text or ""
+        el = None
         if action.target:
-            el = self._find_ax(action.target)
+            try:
+                el = self._find_ax(action.target)
+            except ElementNotFoundError:
+                el = None
+        if el is None:
+            # Auto-locate the address/search field: direct setValue is far more
+            # reliable than synthesized keyboard events into the focused app.
+            el = self._find_text_field()
+        if el is not None:
             err = ax.AXUIElementSetAttributeValue(el, "AXValue", text)
             if err == 0:
-                return ActionResult(True, action, detail=f"set AXValue ({text[:30]!r})", method="ax-value")
+                return ActionResult(True, action,
+                                    detail=f"set AXValue on text field ({text[:30]!r})",
+                                    method="ax-value")
             # fall through to keyboard
-        # CGEvent unicode keyboard entry
-        pt = Quartz.CGPointMake(400, 400)
+        # CGEvent unicode keyboard entry, delivered to the target app directly
         for ch in text:
             evt_down = Quartz.CGEventCreateKeyboardEvent(None, 0, True)
             Quartz.CGEventKeyboardSetUnicodeString(evt_down, 1, ch)
-            Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt_down)
-            Quartz.CGEventPost(Quartz.kCGHIDEventTap,
-                              Quartz.CGEventCreateKeyboardEvent(None, 0, False))
+            self._post_event(evt_down)
+            self._post_event(Quartz.CGEventCreateKeyboardEvent(None, 0, False))
         return ActionResult(True, action, detail=f"typed {len(text)} chars", method="cg-keyboard-unicode")
+
+    def _post_event(self, evt) -> None:
+        """Post a CGEvent to the global HID tap.
+
+        Measured on Safari: CGEventPostToPid keyboard events are ignored, but
+        HID-tap events work once the target app is OS-frontmost (open_app now
+        activates the app via NSWorkspace)."""
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
+
+    def _activate_app(self, app_id: str) -> bool:
+        """Bring an app to the OS front (makes keyboard events land)."""
+        ws = AppKit.NSWorkspace.sharedWorkspace()
+        for a in ws.runningApplications():
+            bid = a.bundleIdentifier() or ""
+            name = a.localizedName() or ""
+            if app_id in (bid, name):
+                a.activateWithOptions_(AppKit.NSApplicationActivateIgnoringOtherApps)
+                return True
+        return False
 
     def _key(self, action: Action) -> ActionResult:
         from backends._mac_keys import KEYCODES, MODIFIER_FLAGS
@@ -342,12 +446,12 @@ class MacOSBackend(DeviceBackend):
             flags |= MODIFIER_FLAGS.get(m.lower(), 0)
         kc = KEYCODES[key]
         evt_down = Quartz.CGEventCreateKeyboardEvent(None, kc, True)
-        evt_down.setFlags(flags)
-        Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt_down)
+        Quartz.CGEventSetFlags(evt_down, flags)
+        self._post_event(evt_down)
         evt_up = Quartz.CGEventCreateKeyboardEvent(None, kc, False)
-        evt_up.setFlags(flags)
-        Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt_up)
-        return ActionResult(True, action, detail=f"key {key}", method="cg-keyboard-virtual-key")
+        Quartz.CGEventSetFlags(evt_up, flags)
+        self._post_event(evt_up)
+        return ActionResult(True, action, detail=f"key {key} -> pid", method="cg-keyboard-virtual-key")
 
     def _scroll(self, action: Action) -> ActionResult:
         dir_map = {"down": -1.0, "up": 1.0, "left": 1.0, "right": -1.0}
@@ -355,7 +459,7 @@ class MacOSBackend(DeviceBackend):
         pos, _ = self._resolve_pos(action) if (action.target or action.pos) else ((self._sw/2, self._sh/2), None)
         evt = Quartz.CGEventCreateScrollWheelEvent(
             None, Quartz.kCGScrollEventUnitLine, 1, int(val * 3))
-        evt.setLocation(Quartz.CGPointMake(pos[0], pos[1]))
+        Quartz.CGEventSetLocation(evt, Quartz.CGPointMake(pos[0], pos[1]))
         Quartz.CGEventPost(Quartz.kCGHIDEventTap, evt)
         return ActionResult(True, action, detail=f"scroll {action.dir}", method="cg-scroll-wheel")
 

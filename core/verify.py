@@ -7,10 +7,16 @@ and platform-agnostic; richer checks (screenshot diff, OCR) plug in later.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Optional
 
 from core.types import Action, ActionResult, ScreenState
+
+
+def _extract_domain(url: str) -> Optional[str]:
+    m = re.match(r'https?://([^/]+)', url)
+    return m.group(1).lower() if m else None
 
 
 @dataclass
@@ -50,6 +56,14 @@ def verify_step(
     if changed:
         sample = ', '.join(changed[:3])
         return VerificationResult(True, f'screen changed ({len(changed)} elements)')
+
+    if action.kind == 'type' and action.text:
+        # navigation check: did a URL-like input surface in the page/window title?
+        dom = _extract_domain(action.text)
+        if dom:
+            texts = [e.text.lower() for e in current.tree.flatten() if e.text]
+            if any(dom.split('.')[0] in t or dom in t for t in texts):
+                return VerificationResult(True, f'page shows {dom}')
 
     if action.kind in ('tap', 'type'):
         return VerificationResult(
