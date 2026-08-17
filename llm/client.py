@@ -18,7 +18,7 @@ from typing import Optional
 
 from core.types import Action, Decision, ScreenState
 from llm.providers import PROVIDER_ANTHROPIC, ProviderConfig, load_provider_config
-from llm.schema import ACTION_SCHEMA, OBSERVATION_PROMPT
+from llm.schema import ACTION_SCHEMA, SYSTEM_PROMPT
 
 
 class LLMError(Exception):
@@ -150,8 +150,8 @@ class AnthropicClient(LLMClient):
                 "description": "输出下一个 GUI 动作（单个 JSON 对象）。",
                 "input_schema": ACTION_SCHEMA,
             }],
+            system=SYSTEM_PROMPT,
             messages=[{'role': 'user', 'content': [
-                {'type': 'text', 'text': OBSERVATION_PROMPT},
                 {'type': 'text', 'text': _build_user_message(goal, state, history)},
             ]}],
             **kwargs,
@@ -205,8 +205,10 @@ class OpenAIClient(LLMClient):
                     "description": "输出下一个 GUI 动作（单个 JSON 对象）。",
                     "parameters": ACTION_SCHEMA},
             }],
-            messages=[{'role': 'user', 'content': OBSERVATION_PROMPT + chr(10) + chr(10) +
-                      _build_user_message(goal, state, history)}],
+            messages=[
+                {'role': 'system', 'content': SYSTEM_PROMPT},
+                {'role': 'user', 'content': _build_user_message(goal, state, history)},
+            ],
             **extra,
             **kwargs,
         )

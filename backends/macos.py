@@ -370,6 +370,8 @@ class MacOSBackend(DeviceBackend):
             return self._type(action)
         if kind == "set_address_bar":
             return self._set_address_bar(action)
+        if kind == "new_tab":
+            return self._new_tab(action)
         if kind == "key":
             return self._key(action)
         if kind == "shortcut":  # 容忍 LLM 用 shortcut 表示组合键
@@ -530,6 +532,23 @@ class MacOSBackend(DeviceBackend):
                                 method="ax-value+return")
         return ActionResult(False, action, detail="地址栏聚焦失败",
                             method="ax-value+return", error=last_error)
+
+    def _new_tab(self, action: Action) -> ActionResult:
+        """新建浏览器标签页（Cmd+T），不影响已有标签页。
+
+        安全原则的核心原语：检索/导航类任务应先在干净的新标签页里进行，
+        而不是覆盖用户正在浏览的页面。
+        """
+        front = self._frontmost_app()
+        self._activate_app(str(front.bundleIdentifier() or ""))
+        time.sleep(0.5)
+        evt = Quartz.CGEventCreateKeyboardEvent(None, 17, True)  # 17 = T
+        Quartz.CGEventSetFlags(evt, 0x100000)  # command
+        self._post_event(evt)
+        self._post_event(Quartz.CGEventCreateKeyboardEvent(None, 17, False))
+        time.sleep(0.8)
+        return ActionResult(True, action, detail="已新建标签页",
+                            method="cg-keyboard-cmd-t")
 
     def _key(self, action: Action) -> ActionResult:
         from backends._mac_keys import KEYCODES, MODIFIER_FLAGS
