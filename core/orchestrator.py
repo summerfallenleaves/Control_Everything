@@ -54,6 +54,7 @@ class AgentOrchestrator:
         self.vision_interval = max(1, vision_interval)
         # 初始设为间隔值，让第 1 步必定做视觉分析（全新开始）。
         self._steps_since_vision = self.vision_interval
+        self._fail_counts: dict[tuple, int] = {}
         self.history: list[str] = []
 
     def run(self, goal: str) -> RunResult:
@@ -125,6 +126,21 @@ class AgentOrchestrator:
             if not act_result.ok:
                 result.last_error = f'动作 {action.kind} 失败: {act_result.error}'
                 last_action_kind = None  # 失败的动作没有改变任何东西
+                # 防重复失败：相同动作连续失败达到阈值时显式警告 LLM 换策略
+                fail_key = (
+                    action.kind,
+                    (action.target or ''),
+                    str(action.pos or ''),
+                    (action.text or '')[:60],
+                )
+                self._fail_counts[fail_key] = self._fail_counts.get(fail_key, 0) + 1
+                n = self._fail_counts[fail_key]
+                if n >= 3:
+                    self.history.append(
+                        f'警告: 这个动作已连续失败 {n} 次，不要再重复！'
+                        f'请换一种策略（例如改用 pos 坐标点击、'
+                        f'set_address_bar(url) 或重新感知后再定位元素）。'
+                    )
                 # 继续循环：LLM 可以恢复（例如重新定位元素）
                 continue
 

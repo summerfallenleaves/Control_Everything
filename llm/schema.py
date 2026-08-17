@@ -32,7 +32,10 @@ OBSERVATION_PROMPT = """
 尽可能使用元素 ref；坐标仅作兜底。
 
 可用动作：tap、type、swipe、scroll、key、open_app、back、home、
-app_switch、wait、copy、paste、long_press、pinch、done。
+app_switch、wait、copy、paste、long_press、pinch、set_address_bar、done。
+
+浏览器中导航到具体网站时，优先使用 set_address_bar(url) ——
+它一步完成「聚焦地址栏、输入、回车」，比 tap+type+key 更可靠。
 
 只有当确实无法选定动作时（例如等待页面加载），才允许输出简短文本。
 否则必须调用 gui_action 工具——不要叙述，不要复述计划。

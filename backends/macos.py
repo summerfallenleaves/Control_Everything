@@ -109,8 +109,9 @@ class MacOSBackend(DeviceBackend):
         except Exception:
             pass
         try:  # AXValue 包装
-            err, r = ax.AXValueGetValue(value, ax.kAXValueCGRectType, None)
-            if err == 0 and hasattr(r, "origin"):
+            ok, r = ax.AXValueGetValue(value, ax.kAXValueCGRectType, None)
+            # pyobjc 返回 (bool成功标志, 值)，成功标志是 True 而不是 0
+            if ok and hasattr(r, "origin"):
                 return Rect(r.origin.x, r.origin.y, r.size.width, r.size.height)
         except Exception:
             pass
@@ -122,8 +123,8 @@ class MacOSBackend(DeviceBackend):
 
     def _ax_point(self, value):
         try:
-            err, p = ax.AXValueGetValue(value, ax.kAXValueCGPointType, None)
-            if err == 0 and hasattr(p, "x"):
+            ok, p = ax.AXValueGetValue(value, ax.kAXValueCGPointType, None)
+            if ok and hasattr(p, "x"):
                 return (p.x, p.y)
         except Exception:
             pass
@@ -131,8 +132,8 @@ class MacOSBackend(DeviceBackend):
 
     def _ax_size(self, value):
         try:
-            err, s = ax.AXValueGetValue(value, ax.kAXValueCGSizeType, None)
-            if err == 0 and hasattr(s, "width"):
+            ok, s = ax.AXValueGetValue(value, ax.kAXValueCGSizeType, None)
+            if ok and hasattr(s, "width"):
                 return (s.width, s.height)
         except Exception:
             pass
@@ -367,6 +368,8 @@ class MacOSBackend(DeviceBackend):
             return self._tap(action)
         if kind == "type":
             return self._type(action)
+        if kind == "set_address_bar":
+            return self._set_address_bar(action)
         if kind == "key":
             return self._key(action)
         if kind == "shortcut":  # 容忍 LLM 用 shortcut 表示组合键
@@ -400,7 +403,9 @@ class MacOSBackend(DeviceBackend):
                 pass  # 落到坐标兜底
             if action.pos:
                 return self._cg_click(self._native(action.pos), action)
-            raise ElementNotFoundError(f'元素没有 frame/位置: {action.target}')
+            raise ElementNotFoundError(
+                f'元素没有 frame/位置: {action.target}；建议改用 pos 坐标点击'
+            )
         if action.pos:
             return self._cg_click(self._native(action.pos), action)
         raise BackendError("tap 需要 target 或 pos")
@@ -481,6 +486,50 @@ class MacOSBackend(DeviceBackend):
                 a.activateWithOptions_(AppKit.NSApplicationActivateIgnoringOtherApps)
                 return True
         return False
+
+    def _set_address_bar(self, action: Action) -> ActionResult:
+        """浏览器地址栏导航的一站式原语。
+
+        把「聚焦地址栏 -> 输入 URL -> 回车」这条易错的四步链封装为单个
+        可靠动作。关键：点击后验证地址栏真的获得焦点，未聚焦则重试——
+        焦点缺失正是 return 导航失效的根因。
+        """
+        url = (action.text or "").strip()
+        if not url:
+            raise BackendError("set_address_bar 需要 text（URL）")
+        # 幂等激活：确保目标浏览器在 OS 前台（真实 agent 流程会先 open_app，
+        # 但直接调用时可能被终端等抢走焦点）。
+        front = self._frontmost_app()
+        self._activate_app(str(front.bundleIdentifier() or ""))
+        time.sleep(0.5)
+        last_error = ""
+        for attempt in range(1, 4):
+            el = self._find_text_field()
+            if el is None:
+                raise ElementNotFoundError(
+                    "找不到地址栏/文本输入框；当前应用可能不是浏览器"
+                )
+            # 1. 鼠标点击聚焦（无 frame 时点击主窗口地址栏区域）
+            self._focus_for_input(el)
+            time.sleep(0.8)  # 给 Safari 处理点击事件的时间
+            _, focused = ax.AXUIElementCopyAttributeValue(el, "AXFocused", None)
+            if not focused:
+                last_error = "地址栏未获得焦点"
+                continue  # 重试点击
+            # 2. 写入 URL
+            err = ax.AXUIElementSetAttributeValue(el, "AXValue", url)
+            if err != 0:
+                return ActionResult(False, action, detail="写入地址栏失败",
+                                    method="ax-value", error=f"AXValue err={err}")
+            time.sleep(0.3)
+            # 3. 回车导航
+            self._post_event(Quartz.CGEventCreateKeyboardEvent(None, 36, True))
+            self._post_event(Quartz.CGEventCreateKeyboardEvent(None, 36, False))
+            return ActionResult(True, action,
+                                detail=f"地址栏已输入并回车: {url}（第{attempt}次尝试）",
+                                method="ax-value+return")
+        return ActionResult(False, action, detail="地址栏聚焦失败",
+                            method="ax-value+return", error=last_error)
 
     def _key(self, action: Action) -> ActionResult:
         from backends._mac_keys import KEYCODES, MODIFIER_FLAGS

@@ -107,6 +107,7 @@ ActionKind = Literal[
     "scroll",         # 滚动滚动区域（dir: up/down/left/right）
     "key",            # 按键/快捷键（名称、修饰键）
     "open_app",       # 启动应用（标识）
+    "set_address_bar",  # 浏览器地址栏导航：聚焦地址栏 -> 输入 URL -> 回车（一步完成）
     "back",           # 平台返回导航（macOS 上为空操作）
     "home",           # 回到平台主页（macOS 上为空操作）
     "app_switch",     # 切换最近应用（macOS 上为空操作）
