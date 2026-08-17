@@ -66,6 +66,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--no-vision', action='store_true', help='禁用视觉模型')
     parser.add_argument('--no-confirm', action='store_true', help='关闭危险动作确认（仅建议自动化测试时使用）')
     parser.add_argument('--no-plan', action='store_true', help='关闭任务规划')
+    parser.add_argument('--no-reflect', action='store_true', help='关闭失败反思机制')
     parser.add_argument('--inspect', action='store_true', help='导出 UI 树后退出')
     args = parser.parse_args(argv)
 
@@ -117,12 +118,17 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as e:
             print(f'规划器禁用: {e}')
 
+    reflector = None
+    if not args.no_reflect:
+        from core.reflection import Reflector
+        reflector = Reflector(llm)  # 复用决策模型的 ask 能力
+
     from core.orchestrator import AgentOrchestrator
     confirm_cb = None if args.no_confirm else cli_confirm
     orch = AgentOrchestrator(
         backend, llm, max_steps=args.max_steps, verify=not args.no_verify,
         vision=vision, vision_interval=vision_interval,
-        confirm_callback=confirm_cb, planner=planner,
+        confirm_callback=confirm_cb, planner=planner, reflector=reflector,
     )
     result = orch.run(args.goal)
 

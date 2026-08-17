@@ -24,8 +24,10 @@ class Memory:
     failures: dict[str, int] = field(default_factory=dict)  # 失败键 -> 计数
     user_qa: list[tuple[str, str]] = field(default_factory=list)  # (问题, 回答)
     facts: list[str] = field(default_factory=list)       # 环境事实
+    reflections: list[str] = field(default_factory=list)  # 反思结论
     max_completed: int = 10
     max_facts: int = 8
+    max_reflections: int = 2
 
     def record_action(self, action: Action, result: ActionResult) -> None:
         """记录动作结果：成功进 completed，失败进 failures 计数。"""
@@ -39,7 +41,14 @@ class Memory:
         else:
             self.failures[brief] = self.failures.get(brief, 0) + 1
 
+    def record_reflection(self, text: str) -> None:
+        """记录一次反思结论（保留最近几条，新结论优先）。"""
+        if text and text not in self.reflections:
+            self.reflections.append(text)
+            self.reflections = self.reflections[-self.max_reflections:]
+
     def record_user_qa(self, question: str, answer: str) -> None:
+        """记录一次用户问答（保留最近几条）。"""
         self.user_qa.append((question, answer))
         self.user_qa = self.user_qa[-5:]
 
@@ -78,4 +87,7 @@ class Memory:
         if self.facts:
             items = NL.join(f'  · {f}' for f in self.facts)
             blocks.append(f'【环境事实】{NL}{items}')
+        if self.reflections:
+            items = NL.join(f'  💡 {r}' for r in self.reflections)
+            blocks.append(f'【反思结论】{NL}{items}')
         return NL.join(blocks)

@@ -12,6 +12,7 @@ from typing import Optional
 from backends.base import DeviceBackend
 from core.confirm import find_dangerous_keyword
 from core.memory import Memory
+from core.reflection import Reflector
 from core.types import Action, ActionResult, Decision, ScreenState
 from core.verify import VerificationResult, extract_domain, verify_step
 from llm.client import LLMClient
@@ -48,6 +49,9 @@ class AgentOrchestrator:
         vision_interval: int = 3,
         confirm_callback=None,
         planner=None,
+        reflector: Optional[Reflector] = None,
+        fail_threshold: int = 3,
+        reflect_cooldown: int = 5,
     ):
         self.backend = backend
         self.llm = llm
@@ -65,6 +69,12 @@ class AgentOrchestrator:
         self.planner = planner
         # 结构化记忆（跨轮持久上下文）
         self.memory = Memory()
+        # 反思机制（连续失败后的策略复盘）
+        self.reflector = reflector
+        self.fail_threshold = max(1, fail_threshold)
+        self.reflect_cooldown = max(1, reflect_cooldown)
+        self._consecutive_failures = 0
+        self._steps_since_reflection = 0
         self._confirm_allowed: set[str] = set()  # 记住允许的关键词
         self._confirm_denied: set[str] = set()   # 记住拒绝的关键词
         self.history: list[str] = []
@@ -177,6 +187,24 @@ class AgentOrchestrator:
                 self.memory.add_fact(
                     f'{action.kind} {action.text or action.target or ""} 成功'
                 )
+
+            # 反思触发：连续失败达到阈值且超过冷却期
+            self._steps_since_reflection += 1
+            if act_result.ok:
+                self._consecutive_failures = 0
+            else:
+                self._consecutive_failures += 1
+                if (self._consecutive_failures >= self.fail_threshold
+                        and self._steps_since_reflection >= self.reflect_cooldown
+                        and self.reflector is not None):
+                    insight = self.reflector.reflect(
+                        goal, self.memory.render(), self.history[-8:]
+                    )
+                    if insight:
+                        self.memory.record_reflection(insight)
+                        self.history.append(f'  反思: {insight[:150]}')
+                    self._consecutive_failures = 0
+                    self._steps_since_reflection = 0
 
             if not act_result.ok:
                 result.last_error = f'动作 {action.kind} 失败: {act_result.error}'
