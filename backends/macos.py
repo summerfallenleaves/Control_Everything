@@ -382,15 +382,24 @@ class MacOSBackend(DeviceBackend):
         raise ActionNotSupportedError(f'未处理的动作类型: {kind}')
 
     def _tap(self, action: Action) -> ActionResult:
-        """语义按压优先（无需坐标），坐标兜底。"""
+        """语义按压优先（无需坐标），坐标兜底。
+
+        兜底顺序：AXPress -> 元素中心坐标 -> LLM 提供的 pos 坐标。
+        LLM 经常同时给出 target 和 pos；target 失败时不应丢弃 pos。
+        """
         if action.target:
-            el = self._find_ax(action.target)
-            err = ax.AXUIElementPerformAction(el, ax.kAXPressAction)
-            if err == 0:
-                return ActionResult(True, action, detail=f'按压了 {action.target}', method='ax-press')
-            center = self._element_center(el)
-            if center:
-                return self._cg_click(center, action)
+            try:
+                el = self._find_ax(action.target)
+                err = ax.AXUIElementPerformAction(el, ax.kAXPressAction)
+                if err == 0:
+                    return ActionResult(True, action, detail=f'按压了 {action.target}', method='ax-press')
+                center = self._element_center(el)
+                if center:
+                    return self._cg_click(center, action)
+            except ElementNotFoundError:
+                pass  # 落到坐标兜底
+            if action.pos:
+                return self._cg_click(self._native(action.pos), action)
             raise ElementNotFoundError(f'元素没有 frame/位置: {action.target}')
         if action.pos:
             return self._cg_click(self._native(action.pos), action)

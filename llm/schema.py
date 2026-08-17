@@ -40,5 +40,8 @@ app_switch、wait、copy、paste、long_press、pinch、done。
 定位元素时只复制 ref 值（例如 'axid:ShareButton'），
 绝不要粘贴整行 UI 树。
 
+打开某个具体网站时，优先在地址栏直接输入完整 URL（https://...）
+而不是搜索词——URL 输入后可以自动验证导航是否成功。
+
 只返回一个符合动作 Schema 的 JSON 对象。
 """
