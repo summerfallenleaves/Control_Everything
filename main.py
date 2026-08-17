@@ -64,6 +64,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--no-verify', action='store_true', help='禁用步骤验证')
     parser.add_argument('--no-screenshot', action='store_true', help='跳过截图')
     parser.add_argument('--no-vision', action='store_true', help='禁用视觉模型')
+    parser.add_argument('--no-confirm', action='store_true', help='关闭危险动作确认（仅建议自动化测试时使用）')
     parser.add_argument('--inspect', action='store_true', help='导出 UI 树后退出')
     args = parser.parse_args(argv)
 
@@ -94,10 +95,23 @@ def main(argv: list[str] | None = None) -> int:
     except ValueError:
         vision_interval = 3
 
+    def cli_confirm(action=None, ask_mode: bool = False):
+        """CLI 确认回调：危险动作确认 + ask_user 自由提问。"""
+        if ask_mode:
+            question = action if isinstance(action, str) else ''
+            print(f'❓ Agent 提问: {question}')
+            return input('你的回答（直接回车 = 无回答）: ').strip()
+        print('⚠️ 危险动作需要确认:')
+        print(f'   动作: [{action.kind}] {action.to_dict()}')
+        print('   [y] 允许并记住  [n] 拒绝并记住  [o] 仅本次允许  [c] 仅本次拒绝  [回车] 拒绝')
+        return input('选择: ').strip().lower()
+
     from core.orchestrator import AgentOrchestrator
+    confirm_cb = None if args.no_confirm else cli_confirm
     orch = AgentOrchestrator(
         backend, llm, max_steps=args.max_steps, verify=not args.no_verify,
         vision=vision, vision_interval=vision_interval,
+        confirm_callback=confirm_cb,
     )
     result = orch.run(args.goal)
 

@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from backends.base import DeviceBackend
+from core.confirm import find_dangerous_keyword
 from core.types import Action, ActionResult, Decision, ScreenState
 from core.verify import VerificationResult, extract_domain, verify_step
 from llm.client import LLMClient
@@ -44,6 +45,7 @@ class AgentOrchestrator:
         max_text_rounds: int = 3,
         vision=None,
         vision_interval: int = 3,
+        confirm_callback=None,
     ):
         self.backend = backend
         self.llm = llm
@@ -55,6 +57,10 @@ class AgentOrchestrator:
         # 初始设为间隔值，让第 1 步必定做视觉分析（全新开始）。
         self._steps_since_vision = self.vision_interval
         self._fail_counts: dict[tuple, int] = {}
+        # 危险动作确认（Human-in-the-loop）
+        self.confirm_callback = confirm_callback
+        self._confirm_allowed: set[str] = set()  # 记住允许的关键词
+        self._confirm_denied: set[str] = set()   # 记住拒绝的关键词
         self.history: list[str] = []
 
     def run(self, goal: str) -> RunResult:
@@ -113,12 +119,32 @@ class AgentOrchestrator:
 
             action: Action = decision.action
 
+            if action.kind == 'ask_user':
+                # 模型主动向用户提问（如需要人工登录）：把回答写入历史，
+                # 让模型下一轮根据回答继续决策。
+                question = action.text or action.note or '(未说明问题)'
+                answer = self._ask_user(question)
+                self.history.append(f'模型提问: {question[:200]}')
+                self.history.append(f'用户回答: {answer[:200]}')
+                continue
+
             if action.kind == 'done':
                 result.ok = True
                 result.steps = step
                 result.history = list(self.history)
                 result.duration_s = time.monotonic() - started
                 return result
+
+            # 危险动作确认（Human-in-the-loop）
+            confirm_deny = self._confirm_guard(action)
+            if confirm_deny is not None:
+                act_result = ActionResult(
+                    False, action, error=confirm_deny, detail='用户拒绝执行'
+                )
+                self.history.append(_fmt_action(action, act_result))
+                result.last_error = f'动作 {action.kind} 被用户拒绝: {confirm_deny}'
+                last_action_kind = None
+                continue
 
             act_result: ActionResult = self.backend.act(action)
             self.history.append(_fmt_action(action, act_result))
@@ -176,6 +202,43 @@ class AgentOrchestrator:
         result.history = list(self.history)
         result.duration_s = time.monotonic() - started
         return result
+
+
+    def _ask_user(self, question: str) -> str:
+        """向用户提问（ask_user 动作），返回自由文本回答。"""
+        if self.confirm_callback is not None:
+            ans = self.confirm_callback(question, ask_mode=True)
+            if ans:
+                return str(ans)
+        return "(无回答)"
+
+    def _confirm_guard(self, action: Action) -> str | None:
+        """危险动作确认门卫。
+
+        返回 None 表示放行；返回拒绝原因字符串表示不执行。
+        """
+        kw = find_dangerous_keyword(action)
+        if kw is None:
+            return None
+        if kw in self._confirm_allowed:
+            return None  # 已记住允许
+        if kw in self._confirm_denied:
+            return f'关键词「{kw}」已被用户拒绝（本会话记住）'
+        if self.confirm_callback is None:
+            # 无确认通道且未记住 -> 默认拒绝（安全优先）
+            return f'危险动作（{kw}）无确认通道，默认拒绝'
+        choice = self.confirm_callback(action)
+        if choice == 'y':
+            self._confirm_allowed.add(kw)
+            return None
+        if choice == 'n':
+            self._confirm_denied.add(kw)
+            return f'用户拒绝并记住：{kw}'
+        if choice == 'o':
+            return None  # 仅本次允许
+        if choice == 'c':
+            return f'用户仅本次拒绝：{kw}'
+        return f'未获用户确认（默认拒绝）：{kw}'
 
 
 def _fmt_action(a: Action, r: ActionResult) -> str:

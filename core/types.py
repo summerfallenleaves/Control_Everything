@@ -118,6 +118,7 @@ ActionKind = Literal[
     "long_press",     # 移动端手势（macOS 不支持）
     "pinch",          # 移动端手势
     "done",           # Agent 宣告任务完成
+    "ask_user",       # 向用户提问（如需要人工登录/确认），text=问题
 ]
 
 
