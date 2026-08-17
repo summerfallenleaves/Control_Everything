@@ -374,6 +374,12 @@ class MacOSBackend(DeviceBackend):
             return self._new_tab(action)
         if kind == "wait_for":
             return self.wait_for(action.text or "", timeout=action.duration_s)
+        if kind == "close_tab":
+            return self._close_tab(action)
+        if kind == "open_url":
+            return self._open_url(action)
+        if kind == "click_link":
+            return self._click_link(action)
         if kind == "key":
             return self._key(action)
         if kind == "shortcut":  # 容忍 LLM 用 shortcut 表示组合键
@@ -534,6 +540,56 @@ class MacOSBackend(DeviceBackend):
                                 method="ax-value+return")
         return ActionResult(False, action, detail="地址栏聚焦失败",
                             method="ax-value+return", error=last_error)
+
+    def _close_tab(self, action: Action) -> ActionResult:
+        """关闭当前标签页（Cmd+W）。
+
+        用于清理 agent 自己新建的标签页；关闭前应确认目标标签页
+        不是用户正在使用的内容（安全原则由模型判断 + 危险确认兜底）。
+        """
+        front = self._frontmost_app()
+        self._activate_app(str(front.bundleIdentifier() or ""))
+        time.sleep(0.5)
+        evt = Quartz.CGEventCreateKeyboardEvent(None, 13, True)  # 13 = W
+        Quartz.CGEventSetFlags(evt, 0x100000)  # command
+        self._post_event(evt)
+        self._post_event(Quartz.CGEventCreateKeyboardEvent(None, 13, False))
+        time.sleep(0.8)
+        return ActionResult(True, action, detail="已关闭当前标签页",
+                            method="cg-keyboard-cmd-w")
+
+    def _open_url(self, action: Action) -> ActionResult:
+        """系统级打开 URL（macOS open 命令）。
+
+        最可靠的导航兜底：完全绕开浏览器合成事件的不稳定性。
+        系统会在默认浏览器打开（Safari 默认新标签页，不覆盖现有页面）。
+        """
+        url = (action.text or "").strip()
+        if not url:
+            raise BackendError("open_url 需要 text（URL）")
+        if "://" not in url:
+            url = "https://" + url
+        subprocess.run(["open", url], check=False)
+        return ActionResult(True, action, detail=f"系统打开 {url}", method="open-url")
+
+    def _click_link(self, action: Action) -> ActionResult:
+        """语义点击「文本包含 X 的链接」。
+
+        后端在最新 UI 树中搜索匹配的 link 元素并点击，
+        避免 LLM 猜 ref / 坐标。
+        """
+        target = (action.text or "").strip()
+        if not target:
+            raise BackendError("click_link 需要 text（链接文本）")
+        state = self.perceive()
+        low = target.lower()
+        links = [
+            e for e in state.tree.flatten()
+            if e.role == "link" and low in (e.text or "").lower()
+        ]
+        if not links:
+            raise ElementNotFoundError(f"找不到文本包含 {target!r} 的链接")
+        return self._tap(Action(kind="tap", target=links[0].ref))
 
     def _new_tab(self, action: Action) -> ActionResult:
         """新建浏览器标签页（Cmd+T），不影响已有标签页。

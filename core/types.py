@@ -109,6 +109,9 @@ ActionKind = Literal[
     "open_app",       # 启动应用（标识）
     "set_address_bar",  # 浏览器地址栏导航：聚焦地址栏 -> 输入 URL -> 回车（一步完成）
     "new_tab",        # 浏览器新建标签页（不影响已有标签页）
+    "close_tab",      # 关闭当前标签页（用于清理 agent 自己新建的标签页）
+    "open_url",       # 系统级打开 URL（最可靠的导航兜底），text=URL
+    "click_link",     # 语义点击「文本包含 X 的链接」，text=链接文本
     "back",           # 平台返回导航（macOS 上为空操作）
     "home",           # 回到平台主页（macOS 上为空操作）
     "app_switch",     # 切换最近应用（macOS 上为空操作）

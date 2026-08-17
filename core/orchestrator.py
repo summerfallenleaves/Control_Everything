@@ -190,7 +190,7 @@ class AgentOrchestrator:
             last_action_kind = action.kind
 
             # 记录最近输入的 URL 域名，供 wait 之后的导航验证使用。
-            if action.kind == 'type' and action.text:
+            if action.kind in ('type', 'open_url') and action.text:
                 dom = extract_domain(action.text)
                 if dom:
                     pending_domain = dom

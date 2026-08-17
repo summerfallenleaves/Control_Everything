@@ -63,7 +63,7 @@ def verify_step(
             False, f'尚未看到 {pending_domain}（页面可能仍在加载）', fatal=False,
         )
 
-    if action.kind in ('wait', 'wait_for', 'open_app', 'copy', 'paste', 'key', 'done'):
+    if action.kind in ('wait', 'wait_for', 'open_app', 'close_tab', 'copy', 'paste', 'key', 'done'):
         return VerificationResult(True, '该动作类型没有结构检查（结果自带成败信息）')
 
     if prev is None or prev.tree is None or current.tree is None:
@@ -77,7 +77,7 @@ def verify_step(
         sample = ', '.join(changed[:3])
         return VerificationResult(True, f'屏幕已变化（{len(changed)} 个元素）')
 
-    if action.kind == 'type' and action.text:
+    if action.kind in ('type', 'open_url') and action.text:
         # 导航检查：输入的 URL 是否立即出现在页面/窗口标题里？
         dom = extract_domain(action.text)
         if dom and _domain_hits(dom, current):

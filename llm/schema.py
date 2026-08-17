@@ -45,8 +45,11 @@ SYSTEM_PROMPT = """
 
 【操作说明】
 - 可用动作：tap、type、swipe、scroll、key、open_app、back、home、
-  app_switch、wait、copy、paste、long_press、pinch、set_address_bar、
-  new_tab、done。
+  app_switch、wait、wait_for、copy、paste、long_press、pinch、
+  set_address_bar、new_tab、close_tab、open_url、click_link、ask_user、done。
+- open_url(url)：系统级打开链接，是最可靠的导航方式（绕开浏览器合成事件）。
+- click_link(text)：语义点击「文本包含 X 的链接」，避免猜 ref/坐标。
+- close_tab：关闭当前标签页——只用于清理你自己新建的标签页。
 - 浏览器导航到具体网站：优先 set_address_bar(url)（一步完成聚焦+输入+回车）。
 - 浏览器检索/导航的标准流程（必须遵守，不要省略任何一步）：
   1) new_tab 新建标签页（即使当前看起来是空白页，也必须新建）
