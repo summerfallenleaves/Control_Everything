@@ -11,7 +11,7 @@ from typing import Optional
 
 from backends.base import DeviceBackend
 from core.types import Action, ActionResult, Decision, ScreenState
-from core.verify import VerificationResult, verify_step
+from core.verify import VerificationResult, extract_domain, verify_step
 from llm.client import LLMClient
 
 # 可能改变屏幕的动作；这些动作之后的下一步总是强制做一次
@@ -61,6 +61,7 @@ class AgentOrchestrator:
         result = RunResult(goal=goal)
         prev_state: Optional[ScreenState] = None
         last_action_kind: Optional[str] = None
+        pending_domain: Optional[str] = None
 
         for step in range(1, self.max_steps + 1):
             try:
@@ -129,14 +130,23 @@ class AgentOrchestrator:
 
             last_action_kind = action.kind
 
+            # 记录最近输入的 URL 域名，供 wait 之后的导航验证使用。
+            if action.kind == 'type' and action.text:
+                dom = extract_domain(action.text)
+                if dom:
+                    pending_domain = dom
+
             if self.verify_enabled:
                 try:
                     new_state = self.backend.perceive()
                     v: VerificationResult = verify_step(
-                        prev_state, action, act_result, new_state, backend=self.backend
+                        prev_state, action, act_result, new_state, backend=self.backend,
+                        pending_domain=pending_domain,
                     )
                     self.history.append(f'  验证: {v.summary}')
                     prev_state = new_state
+                    if v.ok and '页面已显示' in v.summary:
+                        pending_domain = None  # 导航已确认，清除待验证域名
                     if not v.ok and v.fatal:
                         result.last_error = f'验证失败: {v.summary}'
                         return result
