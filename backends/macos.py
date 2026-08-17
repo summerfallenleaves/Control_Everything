@@ -372,6 +372,8 @@ class MacOSBackend(DeviceBackend):
             return self._set_address_bar(action)
         if kind == "new_tab":
             return self._new_tab(action)
+        if kind == "wait_for":
+            return self.wait_for(action.text or "", timeout=action.duration_s)
         if kind == "key":
             return self._key(action)
         if kind == "shortcut":  # 容忍 LLM 用 shortcut 表示组合键

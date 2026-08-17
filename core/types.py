@@ -119,6 +119,7 @@ ActionKind = Literal[
     "pinch",          # 移动端手势
     "done",           # Agent 宣告任务完成
     "ask_user",       # 向用户提问（如需要人工登录/确认），text=问题
+    "wait_for",       # 条件等待：轮询界面直到出现指定文本，text=目标文本，duration_s=超时秒数
 ]
 
 

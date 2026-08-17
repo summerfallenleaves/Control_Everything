@@ -63,8 +63,8 @@ def verify_step(
             False, f'尚未看到 {pending_domain}（页面可能仍在加载）', fatal=False,
         )
 
-    if action.kind in ('wait', 'open_app', 'copy', 'paste', 'key', 'done'):
-        return VerificationResult(True, '该动作类型没有结构检查')
+    if action.kind in ('wait', 'wait_for', 'open_app', 'copy', 'paste', 'key', 'done'):
+        return VerificationResult(True, '该动作类型没有结构检查（结果自带成败信息）')
 
     if prev is None or prev.tree is None or current.tree is None:
         return VerificationResult(True, '没有可比较的上一快照')

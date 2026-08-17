@@ -70,6 +70,33 @@ class DeviceBackend(abc.ABC):
 
     # -- 辅助 --------------------------------------------------------------
 
+    def wait_for(self, text: str, timeout: float = 30.0) -> ActionResult:
+        """条件等待：轮询界面直到出现指定文本（平台无关默认实现）。
+
+        基于 perceive + UI 树搜索，所有后端自动继承；子类可覆盖
+        为更高效的平台原语（如 Android 的 uiautomator wait）。
+        """
+        import time
+
+        action = Action(kind="wait_for", text=text, duration_s=timeout)
+        deadline = time.time() + max(0.0, timeout)
+        while time.time() < deadline:
+            state = self.perceive()
+            low = text.lower()
+            for e in state.tree.flatten():
+                if low in (e.text or "").lower():
+                    return ActionResult(
+                        True, action,
+                        detail=f"界面出现 {text!r}（元素 {e.ref}）",
+                        method="wait_for",
+                    )
+            time.sleep(2)
+        return ActionResult(
+            False, action,
+            error=f"等待超时: 界面未出现 {text!r}",
+            method="wait_for",
+        )
+
     def is_app_running(self, app_id: str) -> bool:
         """应用（bundle id 或名称）当前是否在运行。
 
