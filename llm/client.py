@@ -73,12 +73,15 @@ def _build_user_message(goal: str, state: ScreenState, history: list[str]) -> st
     prev = NL.join(history[-6:]) if history else '(无)'
     vision_note = state.meta.get('vision_note') if state.meta else None
     plan = state.meta.get('plan') if state.meta else None
+    memory_text = state.meta.get('memory') if state.meta else None
     parts = [
         f'目标: {goal}{NL}{NL}',
         f'平台: {state.platform}, 应用: {state.app}{NL}{NL}',
     ]
     if plan:
         parts.append(f'任务计划（按顺序推进）:{NL}{plan}{NL}{NL}')
+    if memory_text:
+        parts.append(f'{memory_text}{NL}{NL}')
     if vision_note:
         parts.append(f'截图的视觉分析:{NL}{vision_note}{NL}{NL}')
     parts.append(f'UI 树:{NL}{tree_text}{NL}{NL}')

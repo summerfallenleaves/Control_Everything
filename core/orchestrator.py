@@ -11,6 +11,7 @@ from typing import Optional
 
 from backends.base import DeviceBackend
 from core.confirm import find_dangerous_keyword
+from core.memory import Memory
 from core.types import Action, ActionResult, Decision, ScreenState
 from core.verify import VerificationResult, extract_domain, verify_step
 from llm.client import LLMClient
@@ -62,6 +63,8 @@ class AgentOrchestrator:
         self.confirm_callback = confirm_callback
         # 任务规划（长任务导航）
         self.planner = planner
+        # 结构化记忆（跨轮持久上下文）
+        self.memory = Memory()
         self._confirm_allowed: set[str] = set()  # 记住允许的关键词
         self._confirm_denied: set[str] = set()   # 记住拒绝的关键词
         self.history: list[str] = []
@@ -93,6 +96,9 @@ class AgentOrchestrator:
 
             if plan_summary:
                 state.meta['plan'] = plan_summary
+            memory_text = self.memory.render()
+            if memory_text:
+                state.meta['memory'] = memory_text
 
             do_vision = False
             if self.vision is not None and state.screenshot is not None:
@@ -143,6 +149,7 @@ class AgentOrchestrator:
                 answer = self._ask_user(question)
                 self.history.append(f'模型提问: {question[:200]}')
                 self.history.append(f'用户回答: {answer[:200]}')
+                self.memory.record_user_qa(question[:200], answer[:200])
                 continue
 
             if action.kind == 'done':
@@ -165,6 +172,11 @@ class AgentOrchestrator:
 
             act_result: ActionResult = self.backend.act(action)
             self.history.append(_fmt_action(action, act_result))
+            self.memory.record_action(action, act_result)
+            if act_result.ok and action.kind in ('open_app', 'open_url', 'set_address_bar'):
+                self.memory.add_fact(
+                    f'{action.kind} {action.text or action.target or ""} 成功'
+                )
 
             if not act_result.ok:
                 result.last_error = f'动作 {action.kind} 失败: {act_result.error}'
@@ -247,9 +259,11 @@ class AgentOrchestrator:
         choice = self.confirm_callback(action)
         if choice == 'y':
             self._confirm_allowed.add(kw)
+            self.memory.record_user_qa(f'允许执行危险动作', f'关键词「{kw}」允许并记住')
             return None
         if choice == 'n':
             self._confirm_denied.add(kw)
+            self.memory.record_user_qa(f'拒绝危险动作', f'关键词「{kw}」拒绝并记住')
             return f'用户拒绝并记住：{kw}'
         if choice == 'o':
             return None  # 仅本次允许
