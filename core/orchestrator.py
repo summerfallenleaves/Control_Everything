@@ -46,6 +46,7 @@ class AgentOrchestrator:
         vision=None,
         vision_interval: int = 3,
         confirm_callback=None,
+        planner=None,
     ):
         self.backend = backend
         self.llm = llm
@@ -59,6 +60,8 @@ class AgentOrchestrator:
         self._fail_counts: dict[tuple, int] = {}
         # 危险动作确认（Human-in-the-loop）
         self.confirm_callback = confirm_callback
+        # 任务规划（长任务导航）
+        self.planner = planner
         self._confirm_allowed: set[str] = set()  # 记住允许的关键词
         self._confirm_denied: set[str] = set()   # 记住拒绝的关键词
         self.history: list[str] = []
@@ -70,12 +73,26 @@ class AgentOrchestrator:
         last_action_kind: Optional[str] = None
         pending_domain: Optional[str] = None
 
+        # 任务开始前规划一次（失败则退回无规划模式，不阻塞）
+        plan_summary = ''
+        if self.planner is not None:
+            try:
+                plan = self.planner.plan(goal)
+                plan_summary = plan.summary
+                if plan_summary:
+                    self.history.append(f'任务计划:{chr(10)}{plan_summary}')
+            except Exception as e:
+                self.history.append(f'规划跳过: {e}')
+
         for step in range(1, self.max_steps + 1):
             try:
                 state = self.backend.perceive()
             except Exception as e:
                 result.last_error = f'感知失败: {e}'
                 return result
+
+            if plan_summary:
+                state.meta['plan'] = plan_summary
 
             do_vision = False
             if self.vision is not None and state.screenshot is not None:
