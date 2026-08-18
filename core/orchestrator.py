@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -74,6 +75,7 @@ class AgentOrchestrator:
         self.fail_threshold = max(1, fail_threshold)
         self.reflect_cooldown = max(1, reflect_cooldown)
         self._consecutive_failures = 0
+        self._low_progress_steps = 0
         self._steps_since_reflection = 0
         self._confirm_allowed: set[str] = set()  # 记住允许的关键词
         self._confirm_denied: set[str] = set()   # 记住拒绝的关键词
@@ -188,23 +190,11 @@ class AgentOrchestrator:
                     f'{action.kind} {action.text or action.target or ""} 成功'
                 )
 
-            # 反思触发：连续失败达到阈值且超过冷却期
-            self._steps_since_reflection += 1
+            # 失败计数（反思触发在验证之后统一判断）
             if act_result.ok:
                 self._consecutive_failures = 0
             else:
                 self._consecutive_failures += 1
-                if (self._consecutive_failures >= self.fail_threshold
-                        and self._steps_since_reflection >= self.reflect_cooldown
-                        and self.reflector is not None):
-                    insight = self.reflector.reflect(
-                        goal, self.memory.render(), self.history[-8:]
-                    )
-                    if insight:
-                        self.memory.record_reflection(insight)
-                        self.history.append(f'  反思: {insight[:150]}')
-                    self._consecutive_failures = 0
-                    self._steps_since_reflection = 0
 
             if not act_result.ok:
                 result.last_error = f'动作 {action.kind} 失败: {act_result.error}'
@@ -249,6 +239,37 @@ class AgentOrchestrator:
                     if not v.ok and v.fatal:
                         result.last_error = f'验证失败: {v.summary}'
                         return result
+                    # 低进展检测：动作成功但界面几乎没变（死循环信号）
+                    low_progress = False
+                    if v.ok and '屏幕已变化' in v.summary:
+                        m = re.search(r'（(\d+) 个元素）', v.summary)
+                        if m and int(m.group(1)) <= 1:
+                            low_progress = True
+                    elif not v.ok and not v.fatal:
+                        low_progress = True
+                    self._low_progress_steps = (
+                        self._low_progress_steps + 1 if low_progress else 0
+                    )
+                    # 反思触发：连续失败 或 低进展死循环，且超过冷却期
+                    self._steps_since_reflection += 1
+                    trigger = None
+                    if self._consecutive_failures >= self.fail_threshold:
+                        trigger = '连续失败'
+                    elif self._low_progress_steps >= self.fail_threshold:
+                        trigger = '低进展死循环'
+                    if (trigger
+                            and self._steps_since_reflection >= self.reflect_cooldown
+                            and self.reflector is not None):
+                        insight = self.reflector.reflect(
+                            goal, self.memory.render(), self.history[-8:],
+                            trigger=trigger,
+                        )
+                        if insight:
+                            self.memory.record_reflection(insight)
+                            self.history.append(f'  反思: {insight[:150]}')
+                        self._consecutive_failures = 0
+                        self._low_progress_steps = 0
+                        self._steps_since_reflection = 0
                 except Exception as e:
                     self.history.append(f'  验证跳过: {e}')
             else:
