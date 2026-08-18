@@ -98,15 +98,26 @@ def main(argv: list[str] | None = None) -> int:
         vision_interval = 3
 
     def cli_confirm(action=None, ask_mode: bool = False):
-        """CLI 确认回调：危险动作确认 + ask_user 自由提问。"""
+        """CLI 确认回调：危险动作确认 + ask_user 自由提问。
+
+        非交互环境（无 stdin，如后台运行）返回空串：
+        - ask_user -> 无回答（模型据此继续决策）
+        - 危险确认 -> 默认拒绝（安全优先）
+        """
         if ask_mode:
             question = action if isinstance(action, str) else ''
             print(f'❓ Agent 提问: {question}')
-            return input('你的回答（直接回车 = 无回答）: ').strip()
+            try:
+                return input('你的回答（直接回车 = 无回答）: ').strip()
+            except EOFError:
+                return ''
         print('⚠️ 危险动作需要确认:')
         print(f'   动作: [{action.kind}] {action.to_dict()}')
         print('   [y] 允许并记住  [n] 拒绝并记住  [o] 仅本次允许  [c] 仅本次拒绝  [回车] 拒绝')
-        return input('选择: ').strip().lower()
+        try:
+            return input('选择: ').strip().lower()
+        except EOFError:
+            return ''
 
     planner = None
     if not args.no_plan:
